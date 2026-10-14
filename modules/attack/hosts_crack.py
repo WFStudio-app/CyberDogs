@@ -101,7 +101,7 @@ def main(service="ssh"):
     header(f"Подбор / Взлом → {title}")
 
     host = input(f"{C.GREEN}  Целевой хост (IP или домен, Enter — отмена): {C.RESET}").strip()
-    if not host:
+    if not host or host == "01":       # «01» — быстрый возврат в главное меню
         print(f"{C.DIM}  Отменено.{C.RESET}")
         pause()
         return

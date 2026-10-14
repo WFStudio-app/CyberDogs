@@ -94,11 +94,14 @@ def _choose_target():
     for i, (ssid, secure) in enumerate(targets, 1):
         lock = f"{C.RED}WPA/WPA2{C.RESET}" if secure else f"{C.GREEN}открытая{C.RESET}"
         print(f"  {i:<4}{ssid[:27]:<28}{lock}")
+    print(f"{C.DIM}  01 — главное меню · Enter — отмена{C.RESET}")
     print()
 
     while True:
         raw = input(f"{C.GREEN}  Выберите сеть (№ или имя, Enter — отмена): {C.RESET}").strip()
         if not raw:
+            return None
+        if raw == "01":                      # быстрый выход в главное меню
             return None
         if raw.isdigit() and 1 <= int(raw) <= len(targets):
             return targets[int(raw) - 1][0]
