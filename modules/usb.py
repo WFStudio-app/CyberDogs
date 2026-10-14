@@ -42,6 +42,7 @@ import subprocess
 import threading
 
 from core.ui import C, ACCENT, header, pause, spinner, progress, section, box, key_hint
+from core.termuxapi import api_bin
 
 
 SYS_USB = "/sys/bus/usb/devices"
@@ -50,11 +51,17 @@ SYS_USB = "/sys/bus/usb/devices"
 # ───────────────────────── helpers ─────────────────────────
 
 def run(cmd, timeout=10):
-    """Выполнить команду, вернуть stdout или None."""
-    if not shutil.which(cmd[0]):
+    """Выполнить команду, вернуть stdout или None.
+
+    Бинарники Termux:API ищутся через core.termuxapi (PATH + каталоги
+    Termux) — ложного «Termux:API недоступен» больше не будет.
+    """
+    exe = api_bin(cmd[0]) or shutil.which(cmd[0])
+    if exe is None:
         return None
     try:
-        return subprocess.check_output(cmd, stderr=subprocess.DEVNULL,
+        return subprocess.check_output([exe] + list(cmd[1:]),
+                                       stderr=subprocess.DEVNULL,
                                        text=True, timeout=timeout)
     except Exception:
         return None

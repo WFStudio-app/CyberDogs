@@ -18,13 +18,21 @@ try:
 except ImportError:
     from core.ui import C
 
+from core.termuxapi import api_bin
+
 
 def run(cmd):
-    """Выполнить команду, вернуть вывод или None."""
-    if not shutil.which(cmd[0]):
+    """Выполнить команду, вернуть вывод или None.
+
+    Бинарники Termux:API ищутся через core.termuxapi (PATH + каталоги
+    Termux) — чтобы не было ложного «Termux:API недоступен».
+    """
+    exe = api_bin(cmd[0]) or shutil.which(cmd[0])
+    if exe is None:
         return None
     try:
-        return subprocess.check_output(cmd, stderr=subprocess.DEVNULL,
+        return subprocess.check_output([exe] + list(cmd[1:]),
+                                       stderr=subprocess.DEVNULL,
                                        text=True, timeout=10)
     except Exception:
         return None

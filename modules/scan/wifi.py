@@ -18,7 +18,6 @@ pywifi / nmcli / iw не используются.
 """
 
 import json
-import shutil
 import subprocess
 import threading
 import time
@@ -28,15 +27,24 @@ try:
 except ImportError:
     from core.ui import C
 
+from core.termuxapi import api_bin
+
 
 # ─────────────── утилиты ───────────────
 
 def run(cmd, timeout=25):
-    """Выполнить команду, вернуть stdout или None."""
-    if not shutil.which(cmd[0]):
+    """Выполнить команду, вернуть stdout или None.
+
+    Бинарники ищутся через core.termuxapi (PATH + каталоги Termux),
+    поэтому Termux:API определяется корректно даже при запуске
+    CyberDogs вне обычной оболочки Termux.
+    """
+    exe = api_bin(cmd[0])
+    if exe is None:
         return None
     try:
-        return subprocess.check_output(cmd, stderr=subprocess.DEVNULL,
+        return subprocess.check_output([exe] + list(cmd[1:]),
+                                       stderr=subprocess.DEVNULL,
                                        text=True, timeout=timeout)
     except Exception:
         return None
@@ -121,8 +129,9 @@ def sec_label(cap):
 # ─────────────── источники данных ───────────────
 
 def termux_available():
-    """Termux:API доступен? (есть бинарники termux-wifi-*)."""
-    return shutil.which("termux-wifi-scaninfo") is not None
+    """Termux:API доступен? (ищем бинарники через core.termuxapi —
+    PATH + каталоги Termux, чтобы не было ложного «недоступен»)."""
+    return api_bin("termux-wifi-scaninfo") is not None
 
 
 def parse_termux(out):
@@ -155,10 +164,11 @@ def parse_termux(out):
 
 def trigger_termux_scan(stop_event):
     """Запустить активный Wi-Fi-скан средствами Android через Termux:API."""
-    if not shutil.which("termux-wifi-scan"):
+    exe = api_bin("termux-wifi-scan")
+    if exe is None:
         return False
     try:
-        subprocess.run(["termux-wifi-scan"], stderr=subprocess.DEVNULL,
+        subprocess.run([exe], stderr=subprocess.DEVNULL,
                        stdin=subprocess.DEVNULL, text=True, timeout=10)
     except Exception:
         return False
