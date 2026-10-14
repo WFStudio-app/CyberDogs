@@ -18,10 +18,11 @@ if BASE_DIR not in sys.path:
 
 from core.ui import header, clear, pause, menu_loop
 from modules.scan import networks, signals, wifi
+from modules.attack import wifi_crack, hosts_crack
 
 
 APP_NAME = "CyberDogs"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 # ───────────────────────── Сканирование ─────────────────────────
@@ -61,11 +62,43 @@ def scanning_menu():
     menu_loop("СКАНИРОВАНИЕ", items)
 
 
+# ───────────────────────── Подбор / Взлом ─────────────────────────
+
+def crack_wifi():
+    """Подбор пароля от Wi-Fi (шаг 0.5 сек, словари pn_*.txt)."""
+    clear()
+    wifi_crack.main()
+
+
+def crack_host():
+    """Подбор пароля от хоста (SSH)."""
+    clear()
+    hosts_crack.main(service="ssh")
+
+
+def crack_devices():
+    """Подбор пароля от других устройств (FTP/Telnet-сервисы роутеров, камер и т.п.)."""
+    clear()
+    hosts_crack.main(service="ftp")
+
+
+def attack_menu():
+    """Внутреннее меню раздела «Подбор / Взлом»."""
+    items = [
+        ("1. Подбор пароля от Wifi",         crack_wifi),
+        ("2. Подбор пароля от Хоста",        crack_host),
+        ("3. Подбор пароля от других устройств", crack_devices),
+        ("← Назад", None),
+    ]
+    menu_loop("ПОДБОР / ВЗЛОМ", items)
+
+
 # ───────────────────────── Главное меню ─────────────────────────
 
 def main_menu():
     items = [
-        ("1. Сканирование", scanning_menu),
+        ("1. Сканирование",   scanning_menu),
+        ("2. Подбор / Взлом", attack_menu),
         ("0. Выход", None),
     ]
     menu_loop(f"{APP_NAME} v{VERSION}", items, banner=True)

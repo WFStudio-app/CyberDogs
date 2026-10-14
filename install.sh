@@ -13,6 +13,9 @@ pkg install -y python git which
 echo "[*] Сетевые утилиты (для сканирования сетей/Wi-Fi)…"
 pkg install -y nmap iproute2 termux-api || true
 
+echo "[*] Python-библиотеки для раздела «Подбор / Взлом»…"
+pip install --upgrade pywifi paramiko || true
+
 echo ""
 echo "[✔] Готово! Не забудьте:"
 echo "    1) Установить приложение Termux:API (из F-Droid / GitHub)"
