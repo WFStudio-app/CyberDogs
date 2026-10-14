@@ -66,7 +66,7 @@ def run_with_stop(worker, title="Сканирование", summary_fn=None):
     thread = threading.Thread(target=_work, daemon=True)
     thread.start()
 
-    print(f"{C.DIM}  ⏹  Нажмите ENTER (или Ctrl+C), чтобы остановить {title.lower()}.{C.RESET}\n")
+    print(f"{C.DIM}  [STOP]  Нажмите ENTER (или Ctrl+C), чтобы остановить {title.lower()}.{C.RESET}\n")
 
     import signal
     is_main = threading.current_thread() is threading.main_thread()
@@ -96,10 +96,10 @@ def run_with_stop(worker, title="Сканирование", summary_fn=None):
     thread.join(timeout=10)
 
     if result_holder["error"]:
-        print(f"{C.RED}  ✖ Ошибка во время работы: {result_holder['error']}{C.RESET}")
+        print(f"{C.RED}  [x] Ошибка во время работы: {result_holder['error']}{C.RESET}")
 
     if stopped_by_user:
-        print(f"\n{C.YELLOW}  ⏹  {title} остановлено пользователем.{C.RESET}")
+        print(f"\n{C.YELLOW}  [STOP]  {title} остановлено пользователем.{C.RESET}")
 
     if summary_fn is not None:
         try:
@@ -108,7 +108,7 @@ def run_with_stop(worker, title="Сканирование", summary_fn=None):
             pass
 
     # ── автовозврат в главное меню через 5 секунд ──
-    print(f"\n{C.CYAN}  ↩  Главное меню через 5 секунд…{C.RESET}")
+    print(f"\n{C.CYAN}  <-  Главное меню через 5 секунд…{C.RESET}")
     for i in range(5, 0, -1):
         sys.stdout.write(f"\r{C.DIM}    Осталось: {i} с   {C.RESET}")
         sys.stdout.flush()

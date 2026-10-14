@@ -268,7 +268,7 @@ def _worker(stop_event, state):
 def _summary(state, result, stopped_by_user):
     nets = state.get("nets", {})
     if state.get("no_active_method"):
-        print(f"{C.RED}  ✖ Termux:API недоступен — сканирование невозможно.{C.RESET}")
+        print(f"{C.RED}  [x] Termux:API недоступен — сканирование невозможно.{C.RESET}")
         print(f"{C.DIM}    Все данные о Wi-Fi сетях берутся только через Termux:API.{C.RESET}")
         print(f"{C.DIM}    Установка: pkg install termux-api +"
               f" приложение Termux:API из F-Droid.{C.RESET}\n")

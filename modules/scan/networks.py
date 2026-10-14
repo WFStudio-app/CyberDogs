@@ -79,7 +79,7 @@ def _worker(stop_event, state):
 
     ips = get_local_interfaces()
     if not ips:
-        print(f"{C.RED}  ✖ Не удалось определить локальные IP-адреса.{C.RESET}")
+        print(f"{C.RED}  [x] Не удалось определить локальные IP-адреса.{C.RESET}")
         print(f"{C.DIM}    Проверьте Wi-Fi/мобильные данные и права Termux.{C.RESET}")
         return found
 
@@ -114,7 +114,7 @@ def _worker(stop_event, state):
                     alive = False
                 if alive:
                     name = resolve_name(tgt)
-                    print(f"{C.GREEN}    ✔ {tgt:<16} {name}{C.RESET}")
+                    print(f"{C.GREEN}    [ok] {tgt:<16} {name}{C.RESET}")
                     with lock:
                         found.append((tgt, name))
 

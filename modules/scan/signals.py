@@ -69,7 +69,7 @@ def scan_bluetooth():
         print(hci)
         return True
 
-    print(f"{C.RED}  ✖ Bluetooth-сканирование недоступно.{C.RESET}")
+    print(f"{C.RED}  [x] Bluetooth-сканирование недоступно.{C.RESET}")
     print(f"{C.DIM}    Установите Termux:API: pkg install termux-api{C.RESET}")
     print(f"{C.DIM}    и приложение Termux:API, затем выдайте разрешения Android.{C.RESET}")
     return False

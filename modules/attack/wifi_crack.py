@@ -87,7 +87,7 @@ def _choose_target():
     print(f"{C.CYAN}  Поиск доступных сетей…{C.RESET}")
     targets = _get_targets()
     if not targets:
-        print(f"{C.YELLOW}  ⚠ Не удалось получить список сетей автоматически.{C.RESET}")
+        print(f"{C.YELLOW}  [!] Не удалось получить список сетей автоматически.{C.RESET}")
         ssid = input(f"{C.GREEN}  Введите имя (SSID) сети-цели вручную (Enter — отмена): {C.RESET}").strip()
         return ssid or None
 
@@ -111,7 +111,7 @@ def _choose_target():
         match = [s for s, _ in targets if s == raw]
         if match:
             return match[0]
-        print(f"{C.RED}  ✖ Нет такой сети.{C.RESET}")
+        print(f"{C.RED}  [x] Нет такой сети.{C.RESET}")
 
 
 def _choose_dictionary():
@@ -138,9 +138,9 @@ def _choose_dictionary():
             path = dict_path(fname)
             if os.path.isfile(path):
                 return path
-            print(f"{C.RED}  ✖ Файл {fname} отсутствует в проекте.{C.RESET}")
+            print(f"{C.RED}  [x] Файл {fname} отсутствует в проекте.{C.RESET}")
             return None
-        print(f"{C.RED}  ✖ Неверный пункт.{C.RESET}")
+        print(f"{C.RED}  [x] Неверный пункт.{C.RESET}")
 
 
 # ─────────────── реальная атака через Termux:API ───────────────
@@ -246,8 +246,8 @@ def run_attack(ssid, dict_path, demo=False):
     mode_tag = f" {C.DIM}(демо-режим){C.RESET}" if demo else ""
     print()
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
-    print(f"{C.BOLD}  🎯 Цель: {ssid}{mode_tag}{C.RESET}")
-    print(f"{C.BOLD}  📚 Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
+    print(f"{C.BOLD}  [target]  Цель: {ssid}{mode_tag}{C.RESET}")
+    print(f"{C.BOLD}  [dict]  Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
     print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
@@ -258,7 +258,7 @@ def run_attack(ssid, dict_path, demo=False):
             real_mode = True
         else:
             demo = True
-            print(f"{C.YELLOW}  ⚠ Termux:API недоступен — включён демо-режим.{C.RESET}\n")
+            print(f"{C.YELLOW}  [!] Termux:API недоступен — включён демо-режим.{C.RESET}\n")
 
     start = time.time()
     found = None
@@ -305,9 +305,9 @@ def run_attack(ssid, dict_path, demo=False):
 
     print()
     if stopped_by_user:
-        print(f"\n{C.YELLOW}  ⛔ Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
+        print(f"\n{C.YELLOW}  [X] Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
     if found:
-        print(f"\n{C.GREEN}{C.BOLD}  ✔ ПАРОЛЬ НАЙДЕН: {found}{C.RESET}")
+        print(f"\n{C.GREEN}{C.BOLD}  [ok] ПАРОЛЬ НАЙДЕН: {found}{C.RESET}")
         _save_result(ssid, found)
     elif not real_mode and not stopped_by_user:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось."
@@ -315,7 +315,7 @@ def run_attack(ssid, dict_path, demo=False):
               f"\n  + приложение Termux:API из F-Droid).{C.RESET}")
         _save_result(ssid, None, demo_note=True)
     elif not stopped_by_user:
-        print(f"\n{C.RED}  ✖ Пароль не найден (словарь исчерпан).{C.RESET}")
+        print(f"\n{C.RED}  [x] Пароль не найден (словарь исчерпан).{C.RESET}")
         _save_result(ssid, None)
 
 
@@ -324,7 +324,7 @@ def main(demo=False):
     header("Подбор / Взлом → Подбор пароля от Wi-Fi")
 
     if demo:
-        print(f"{C.YELLOW}  ⚠ Демо-режим: показывается механика подбора,"
+        print(f"{C.YELLOW}  [!] Демо-режим: показывается механика подбора,"
               f"\n    реальные подключения к сетям НЕ выполняются.{C.RESET}")
 
     ssid = _choose_target()

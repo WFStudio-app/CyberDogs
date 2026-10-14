@@ -24,7 +24,7 @@ from modules import tools, usb
 
 
 APP_NAME = "CyberDogs"
-VERSION = "0.5.0"
+VERSION = "1.0.0"
 
 # единый источник версии для баннера (core.ui)
 ui.set_version(VERSION)
@@ -36,7 +36,7 @@ def scan_networks():
     """Сканирование сетей вокруг (ARP / подсеть), остановка по ENTER."""
     clear()
     header("Сканирование сетей вокруг")
-    networks.scan_local_networks_interactive()   # ⏹ ENTER — стоп, ↩ меню через 5 сек
+    networks.scan_local_networks_interactive()   # [STOP] ENTER — стоп, <- меню через 5 сек
 
 
 def scan_signals():
@@ -51,7 +51,7 @@ def scan_wifi():
     """Сканирование Wi-Fi вокруг — живой список сетей, остановка по ENTER."""
     clear()
     header("Сканирование Wi-Fi вокруг")
-    wifi.scan_wifi_networks_interactive()        # ⏹ ENTER — стоп, ↩ меню через 5 сек
+    wifi.scan_wifi_networks_interactive()        # [STOP] ENTER — стоп, <- меню через 5 сек
 
 
 def scanning_menu():
@@ -127,7 +127,7 @@ def games_menu():
     clear()
     header("ИГРЫ")
     print(f"{ACCENT}  ╭{'─' * 48}╮{C.RESET}")
-    print(f"  🎮  {C.BOLD}Раздел в разработке…{C.RESET}")
+    print(f"  [G] {C.BOLD}Раздел в разработке...{C.RESET}")
     print(f"      Скоро здесь появятся мини-игры для терминала:")
     print(f"      крестики-нолики · змейка · угадай число и другие.")
     print(f"{C.DIM}      Пока тут пусто — загляните позже!{C.RESET}")
@@ -154,5 +154,5 @@ if __name__ == "__main__":
     try:
         main_menu()
     except KeyboardInterrupt:
-        print("\n\n  До встречи! 🐶")
+        print("\n\n  До встречи!")
         sys.exit(0)

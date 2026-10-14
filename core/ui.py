@@ -68,7 +68,7 @@ BANNER = r"""
 {m}      ██▌ ▐█▌  ██ ▀█   ▀▄▀  ▀▀ ██ ▀▄▀  ▐█▀▀▄ ██·▄▄ ▀▀█·
 {m}      ▐▌ ▐█▌  ▐█▪██  ▐█▌.▐█▌.▐█▌.▐█▌.██ ▐█▌.▐█████.▐█▌
 {m}      ▀  ▀▀▀   ▀▀▀▀  ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀ ▀▀▀▀▀·▀▀▀▀ .▀▀▀
-{r}          🐶  Termux Hacking Tool  ·  v{v}{s}
+{r}            Termux Hacking Tool  ·  v{v}{s}
 """.strip("\n")
 
 
@@ -111,7 +111,7 @@ def status_bar():
     parts = [f"OS: {host}", f"Py: {py}"]
     if tmx:
         parts.append(f"Termux: {tmx}")
-    parts.append(f"🕒 {now}")
+    parts.append(f" {now}")
     txt = f"  {' · '.join(parts)}  "
     print(f"{C.BG_DARK}{C.GRAY}{txt}{C.RESET}")
 
@@ -126,7 +126,7 @@ def header(title=""):
     if title:
         line = "═" * 50
         print(f"{ACCENT}{line}{C.RESET}")
-        print(f"{C.BOLD}{C.GREEN}  ▶ {title}{C.RESET}")
+        print(f"{C.BOLD}{C.GREEN}  > {title}{C.RESET}")
         print(f"{ACCENT}{line}{C.RESET}")
     else:
         print(BANNER.format(c=C.CYAN, m=ACCENT, r=C.YELLOW,
@@ -162,8 +162,7 @@ def menu_loop(title, items, banner=False):
             print(f"  {color}{name}{C.RESET}")
 
         print(f"{C.DIM}  ─{'─' * 40}")
-        print(f"  💡 Введите 01 в любом меню — быстрый возврат "
-              f"в главное меню{C.RESET}")
+        print(f"{C.DIM}  » Подсказка: ввод 01 — быстрый возврат в главное меню{C.RESET}")
         print()
         try:
             choice = input(f"{C.GREEN}  cyberdogs/{title.split()[0].lower()}> {C.RESET}").strip()
@@ -191,7 +190,7 @@ def menu_loop(title, items, banner=False):
                 break
 
         if not found:
-            print(f"{C.RED}  ✖ Неверный пункт меню.{C.RESET}")
+            print(f"{C.RED}  [x] Неверный пункт меню.{C.RESET}")
             pause()
 
 
@@ -245,7 +244,7 @@ def key_hint():
     print(f"{C.DIM}  01 — главное меню · 0 — назад/выход{C.RESET}")
 
 
-def section(title, icon="▶"):
+def section(title, icon=">"):
     """Красивый подзаголовок внутри экрана."""
     print(f"\n{ACCENT}  {icon} {C.BOLD}{title}{C.RESET}")
     print(f"{C.DIM}  {'·' * 40}{C.RESET}")
@@ -255,4 +254,4 @@ def check_termux():
     """Предупреждение, если запускаемся не в Termux (не блокирует работу)."""
     prefix = os.environ.get("PREFIX", "")
     if "com.termux" not in prefix and platform.system() != "Android":
-        print(f"{C.YELLOW}  ⚠ Запуск вне Termux — некоторые функции могут не работать.{C.RESET}")
+        print(f"{C.YELLOW}  [!] Запуск вне Termux — некоторые функции могут не работать.{C.RESET}")

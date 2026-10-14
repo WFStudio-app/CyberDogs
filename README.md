@@ -8,6 +8,47 @@
 
 ---
 
+---
+
+## CyberOS v1.0.0 — терминальная операционная система
+
+CyberDogs вырос до полноценной терминальной ОС. Запуск:
+
+```bash
+python3 cyberos.py            # загрузка CyberOS (boot -> login -> шелл)
+python3 cyberdogs.py          # классическое меню (или команда `menu` внутри CyberOS)
+python3 cyberos.py --classic  # то же, что и выше, одной командой
+```
+
+При первом запуске создаётся учётная запись (имя + пароль). Затем — boot-последовательность ядра, экран входа (login) и шелл `cyber-sh`.
+
+Вся система использует только текстовые символы и ANSI-цвета (без эмодзи): `[ok]`, `[x]`, `[!]`, `>` и т.д.
+
+### Возможности CyberOS
+
+| Подсистема | Реализация |
+|---|---|
+| Boot | POST-последовательность, загрузка «ядра», сервисов, модулей |
+| Login | Экран входа, пользователи (`users.json`), пароли, `su` |
+| Shell | REPL с историей, алиасами, приглашением `user@cyber ttyN path$ [uptime]` |
+| FS | `ls cd pwd cat head touch mkdir rm tree grep wc write df goto` |
+| Процессы | `ps`, `run <app>`, `kill <pid>` — приложения регистрируются в таблице процессов |
+| Syslog | `log` — журнал `/root/.cyberos/system.log` (события входа/запуска) |
+| TTY | `tty 1..6` — виртуальные консоли |
+| Система | `neofetch uname uptime date help man alias env reboot shutdown clear exit` |
+| Сеть | `net info / net scan / net ports`, `ping`, `ifconfig` |
+| Приложения | `apps`: scanwifi, netdiscover, bluetooth, wificrack, sshcrack, ftpcrack, usbtools, toolkit — все модули CyberDogs как утилиты ОС |
+
+### Команды шелла (кратко)
+
+```
+help man apps run ps kill log tty su alias goto neofetch
+ls cd pwd cat head touch mkdir rm tree grep wc write df echo date uptime uname
+net ping ifconfig scanwifi crack usbinfo tools menu reboot shutdown clear exit
+```
+
+---
+
 ## 📋 Возможности (текущая версия v0.5.0)
 
 Главное меню:

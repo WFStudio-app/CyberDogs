@@ -72,14 +72,14 @@ def _http_get_json(url, timeout=8):
 
 def tool_ping():
     """Проверить доступность хоста (ping -c 4) с красивым итогом."""
-    section("PING-хост", "📡")
+    section("PING-хост", "[rf] ")
     host = input(f"{C.GREEN}  Хост / IP (Enter — отмена): {C.RESET}").strip()
     if not host:
         return
     print(f"{C.CYAN}  ⟳ Пингую {host}…{C.RESET}\n")
     out = run(["ping", "-c", "4", "-W", "2", host], timeout=20)
     if out is None:
-        print(f"{C.RED}  ✖ Команда ping недоступна.{C.RESET}")
+        print(f"{C.RED}  [x] Команда ping недоступна.{C.RESET}")
         return
     for line in out.splitlines():
         low = line.lower()
@@ -114,7 +114,7 @@ def _scan_port(host, port):
 
 def tool_ports():
     """Быстрый скан TCP-портов хоста (стандартный список + свой диапазон)."""
-    section("Порт-сканер", "🔌")
+    section("Порт-сканер", "[usb] ")
     host = input(f"{C.GREEN}  Целевой хост / IP: {C.RESET}").strip()
     if not host:
         return
@@ -141,11 +141,11 @@ def tool_ports():
                 if alive:
                     open_ports.append(port)
     except KeyboardInterrupt:
-        print(f"\n{C.YELLOW}  ⛔ Сканирование остановлено.{C.RESET}")
+        print(f"\n{C.YELLOW}  [X] Сканирование остановлено.{C.RESET}")
 
     print()
     if open_ports:
-        print(f"{C.GREEN}{C.BOLD}  ✔ Открытые порты на {host}: {len(open_ports)}{C.RESET}")
+        print(f"{C.GREEN}{C.BOLD}  [ok] Открытые порты на {host}: {len(open_ports)}{C.RESET}")
         for p in sorted(open_ports):
             print(f"    • {p:<6} {PORT_NAMES.get(p, '?')}")
     else:
@@ -156,12 +156,12 @@ def tool_ports():
 
 def tool_myip():
     """Публичный IP + геолокация (бесплатный API ip-api.com)."""
-    section("Мой IP и геолокация", "🌍")
+    section("Мой IP и геолокация", "[geo] ")
     with spinner("Запрашиваю данные…"):
         data = _http_get_json("http://ip-api.com/json/?lang=ru-RU&fields="
                               "status,country,regionName,city,isp,org,query,lat,lon")
     if not data or data.get("status") != "success":
-        print(f"{C.RED}  ✖ Нет соединения или API недоступен.{C.RESET}")
+        print(f"{C.RED}  [x] Нет соединения или API недоступен.{C.RESET}")
         return
     rows = [
         ("IP-адрес   ", data.get("query", "?")),
@@ -182,7 +182,7 @@ def tool_myip():
 
 def tool_dns():
     """A / AAAA / MX / TXT записи домена."""
-    section("DNS-запрос", "🧬")
+    section("DNS-запрос", "[dns] ")
     dom = input(f"{C.GREEN}  Домен (ru.wikipedia.org): {C.RESET}").strip()
     if not dom:
         return
@@ -211,7 +211,7 @@ def tool_dns():
 
 def tool_mac_vendor():
     """Производитель устройства по MAC (OUI, база wifi.vendor_from_mac)."""
-    section("MAC → производитель", "🏷")
+    section("MAC → производитель", "[mac] ")
     mac = input(f"{C.GREEN}  MAC-адрес (AA:BB:CC:DD:EE:FF): {C.RESET}").strip()
     if not mac:
         return
@@ -221,17 +221,17 @@ def tool_mac_vendor():
         vendor_from_mac = lambda m: "?"
     vend = vendor_from_mac(mac)
     if vend == "?":
-        print(f"{C.YELLOW}  ⚠ Производителя нет в мини-базе OUI проекта."
+        print(f"{C.YELLOW}  [!] Производителя нет в мини-базе OUI проекта."
               f"\n    Полный поиск: https://macvendors.io/{mac.replace(':', '-')}{C.RESET}")
     else:
-        print(f"{C.GREEN}  ✔ {mac} → {C.BOLD}{vend}{C.RESET}")
+        print(f"{C.GREEN}  [ok] {mac} → {C.BOLD}{vend}{C.RESET}")
 
 
 # ─────────────────── 6. Генератор паролей ───────────────────
 
 def tool_password_gen():
     """Криптостойкая генерация паролей (secrets)."""
-    section("Генератор паролей", "🔑")
+    section("Генератор паролей", "[key] ")
     raw = input(f"{C.GREEN}  Длина [16]: {C.RESET}").strip()
     length = int(raw) if raw.isdigit() and 4 <= int(raw) <= 128 else 16
     flags = {}
@@ -249,21 +249,21 @@ def tool_password_gen():
     if flags["s"]:
         alphabet += "!@#$%^&*()-_=+[]{};:,.<>?/~"
     if not alphabet:
-        print(f"{C.RED}  ✖ Пустой набор символов.{C.RESET}")
+        print(f"{C.RED}  [x] Пустой набор символов.{C.RESET}")
         return
     cnt_raw = input(f"{C.GREEN}  Сколько паролей [5]: {C.RESET}").strip()
     count = int(cnt_raw) if cnt_raw.isdigit() and 1 <= int(cnt_raw) <= 50 else 5
     print()
     for _ in range(count):
         pwd = "".join(secrets.choice(alphabet) for _ in range(length))
-        print(f"    {C.GREEN}🔒 {pwd}{C.RESET}")
+        print(f"    {C.GREEN}[hash]  {pwd}{C.RESET}")
 
 
 # ─────────────────── 7. Hash-калькулятор ───────────────────
 
 def tool_hashes():
     """MD5 / SHA1 / SHA256 / SHA512 строки или файла."""
-    section("Hash-калькулятор", "#️⃣")
+    section("Hash-калькулятор", "#⃣")
     what = input(f"{C.GREEN}  [1] Строка  [2] Файл: {C.RESET}").strip()
     data = b""
     name = ""
@@ -274,7 +274,7 @@ def tool_hashes():
     elif what == "2":
         path = input(f"{C.GREEN}  Путь к файлу: {C.RESET}").strip()
         if not os.path.isfile(path):
-            print(f"{C.RED}  ✖ Файл не найден.{C.RESET}")
+            print(f"{C.RED}  [x] Файл не найден.{C.RESET}")
             return
         with open(path, "rb") as f:
             data = f.read()
@@ -291,7 +291,7 @@ def tool_hashes():
 
 def tool_codecs():
     """Кодирование и декодирование base64 / url / hex."""
-    section("Base64 · URL · Hex", "🧾")
+    section("Base64 · URL · Hex", "[codec] ")
     txt = input(f"{C.GREEN}  Текст: {C.RESET}").rstrip("\n")
     if not txt:
         return
@@ -318,7 +318,7 @@ def tool_codecs():
 
 def tool_telnet():
     """Ручная проверка баннера сервиса (Telnet-клиент на сокетах)."""
-    section("Telnet-клиент", "📞")
+    section("Telnet-клиент", "[telnet] ")
     host = input(f"{C.GREEN}  Хост: {C.RESET}").strip()
     if not host:
         return
@@ -327,9 +327,9 @@ def tool_telnet():
     try:
         s = socket.create_connection((host, port), timeout=5)
     except OSError:
-        print(f"{C.RED}  ✖ Не удалось подключиться к {host}:{port}.{C.RESET}")
+        print(f"{C.RED}  [x] Не удалось подключиться к {host}:{port}.{C.RESET}")
         return
-    print(f"{C.GREEN}  ✔ Подключено. Ctrl+] или пустая строка — отбой.{C.RESET}\n")
+    print(f"{C.GREEN}  [ok] Подключено. Ctrl+] или пустая строка — отбой.{C.RESET}\n")
     stop = threading.Event()
 
     def _reader():
@@ -374,7 +374,7 @@ def _termux_json(cmd):
 
 def tool_device_info():
     """Сводка об Android-устройстве через Termux:API (где доступно)."""
-    section("Об устройстве", "📱")
+    section("Об устройстве", "[phone] ")
     rows = []
 
     batt = _termux_json(["termux-battery-status"])

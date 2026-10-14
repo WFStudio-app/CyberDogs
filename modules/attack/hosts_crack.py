@@ -48,9 +48,9 @@ def _choose_dictionary():
             path = dict_path(fname)
             if os.path.isfile(path):
                 return path
-            print(f"{C.RED}  ✖ Файл {fname} отсутствует в проекте.{C.RESET}")
+            print(f"{C.RED}  [x] Файл {fname} отсутствует в проекте.{C.RESET}")
             return None
-        print(f"{C.RED}  ✖ Неверный пункт.{C.RESET}")
+        print(f"{C.RED}  [x] Неверный пункт.{C.RESET}")
 
 
 def _host_alive(host, port):
@@ -124,7 +124,7 @@ def main(service="ssh"):
     demo = False
     print(f"{C.CYAN}  Проверка доступности {host}:{port}…{C.RESET}")
     if not _host_alive(host, port):
-        print(f"{C.YELLOW}  ⚠ Хост не отвечает — подбор в демо-режиме."
+        print(f"{C.YELLOW}  [!] Хост не отвечает — подбор в демо-режиме."
               f"\n    Убедитесь, что на цели запущен {service.upper()} и порт открыт.{C.RESET}")
         demo = True
 
@@ -145,8 +145,8 @@ def main(service="ssh"):
     mode_tag = f" {C.DIM}(демо-режим){C.RESET}" if demo else ""
     print()
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
-    print(f"{C.BOLD}  🎯 Цель: {user}@{host}:{port} ({service.upper()}){mode_tag}{C.RESET}")
-    print(f"{C.BOLD}  📚 Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
+    print(f"{C.BOLD}  [target]  Цель: {user}@{host}:{port} ({service.upper()}){mode_tag}{C.RESET}")
+    print(f"{C.BOLD}  [dict]  Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
     print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
@@ -166,7 +166,7 @@ def main(service="ssh"):
                     else _try_ftp(host, port, user, pwd)
                 if res is None:          # paramiko недоступно
                     demo = True
-                    print(f"\n{C.YELLOW}  ⚠ paramiko не установлен — включён демо-режим.{C.RESET}")
+                    print(f"\n{C.YELLOW}  [!] paramiko не установлен — включён демо-режим.{C.RESET}")
                     continue
                 ok = bool(res)
             else:
@@ -200,17 +200,17 @@ def main(service="ssh"):
 
     print()
     if stopped_by_user:
-        print(f"\n{C.YELLOW}  ⛔ Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
+        print(f"\n{C.YELLOW}  [X] Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
     log_dir = os.path.join(BASE_DIR, "logs")
     os.makedirs(log_dir, exist_ok=True)
     if found:
-        print(f"\n{C.GREEN}{C.BOLD}  ✔ ДОСТУП ПОЛУЧЕН: {user}@{host}:{port} · пароль: {found}{C.RESET}")
+        print(f"\n{C.GREEN}{C.BOLD}  [ok] ДОСТУП ПОЛУЧЕН: {user}@{host}:{port} · пароль: {found}{C.RESET}")
         with open(os.path.join(log_dir, "hosts_crack.log"), "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {service} {user}@{host}:{port} пароль={found}\n")
     elif demo and not stopped_by_user:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось.{C.RESET}")
     elif not stopped_by_user:
-        print(f"\n{C.RED}  ✖ Пароль не найден (словарь исчерпан).{C.RESET}")
+        print(f"\n{C.RED}  [x] Пароль не найден (словарь исчерпан).{C.RESET}")
         with open(os.path.join(log_dir, "hosts_crack.log"), "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {service} {user}@{host}:{port} результат=не найден\n")
     pause()
