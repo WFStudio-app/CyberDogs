@@ -16,7 +16,7 @@ import time
 import socket
 
 from core.ui import C, header, pause
-from modules.attack.wifi_crack import DICTIONARIES, BASE_DIR
+from modules.attack.wifi_crack import DICTIONARIES, BASE_DIR, dict_path
 
 DELAY = 0.5
 
@@ -27,14 +27,14 @@ def _choose_dictionary():
     print()
     print(f"  {C.BOLD}Выберите словарь для подбора:{C.RESET}")
     for name, fname in DICTIONARIES:
-        path = os.path.join(BASE_DIR, fname)
+        path = dict_path(fname)
         try:
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 count = sum(1 for _ in f)
         except FileNotFoundError:
             count = 0
         size = f"{count:,} паролей".replace(",", " ") if count else "файл не найден!"
-        print(f"    {C.YELLOW}{name}{C.RESET}  {C.DIM}[{fname} · {size}]{C.RESET}")
+        print(f"    {C.YELLOW}{name}{C.RESET}  {C.DIM}[wordlists/{fname} · {size}]{C.RESET}")
     print(f"    {C.DIM}0 — Отмена{C.RESET}")
     print()
     while True:
@@ -43,7 +43,7 @@ def _choose_dictionary():
             return None
         if raw in {"1", "2", "3"}:
             fname = DICTIONARIES[int(raw) - 1][1]
-            path = os.path.join(BASE_DIR, fname)
+            path = dict_path(fname)
             if os.path.isfile(path):
                 return path
             print(f"{C.RED}  ✖ Файл {fname} отсутствует в проекте.{C.RESET}")

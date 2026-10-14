@@ -8,7 +8,7 @@ modules.attack.wifi_crack — Подбор пароля от Wi-Fi.
     шаг подбора — каждые 0.5 секунды;
   • при успехе пароль выводится и подбор останавливается.
 
-Словари лежат в корне проекта:
+Словари лежат в папке wordlists/ проекта:
   pn_e00001.txt  — цифры, easy pass
   pn_h0001.txt   — цифры, hard pass (200k p)
   pn_ea_01.txt   — цифры + буквы
@@ -26,6 +26,9 @@ from core.ui import C, header, pause
 BASE_DIR = os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))))
 
+# Папка со словарями для подбора паролей
+WORDLISTS_DIR = os.path.join(BASE_DIR, "wordlists")
+
 DELAY = 0.5  # шаг подбора — каждые 0.5 секунды
 
 DICTIONARIES = [
@@ -33,6 +36,11 @@ DICTIONARIES = [
     ("2. Подбор из цифр (Hard pass | 200k p)", "pn_h0001.txt"),
     ("3. Подбор паролей из цифр и букв", "pn_ea_01.txt"),
 ]
+
+
+def dict_path(fname):
+    """Полный путь к файлу словаря в папке wordlists/."""
+    return os.path.join(WORDLISTS_DIR, fname)
 
 
 # ─────────────────── цели (список сетей) ───────────────────
@@ -123,14 +131,14 @@ def _choose_dictionary():
     print()
     print(f"  {C.BOLD}Выберите словарь для подбора:{C.RESET}")
     for name, fname in DICTIONARIES:
-        path = os.path.join(BASE_DIR, fname)
+        path = dict_path(fname)
         try:
             with open(path, "r", encoding="utf-8", errors="ignore") as f:
                 count = sum(1 for _ in f)
         except FileNotFoundError:
             count = 0
         size = f"{count:,} паролей".replace(",", " ") if count else "файл не найден!"
-        print(f"    {C.YELLOW}{name}{C.RESET}  {C.DIM}[{fname} · {size}]{C.RESET}")
+        print(f"    {C.YELLOW}{name}{C.RESET}  {C.DIM}[wordlists/{fname} · {size}]{C.RESET}")
     print(f"    {C.DIM}0 — Отмена{C.RESET}")
     print()
     while True:
@@ -139,7 +147,7 @@ def _choose_dictionary():
             return None
         if raw in {"1", "2", "3"}:
             fname = DICTIONARIES[int(raw) - 1][1]
-            path = os.path.join(BASE_DIR, fname)
+            path = dict_path(fname)
             if os.path.isfile(path):
                 return path
             print(f"{C.RED}  ✖ Файл {fname} отсутствует в проекте.{C.RESET}")
