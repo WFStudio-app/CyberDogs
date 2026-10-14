@@ -5,17 +5,19 @@ modules/scan/networks.py — Сканирование сетей вокруг.
 
 Определяет локальные сети устройства (Termux) и делает быстрый
 ARP/ping-обход подсети, чтобы найти активные хосты.
-Без внешних зависимостей: только стандартная библиотека + ping.
+
+v0.3.0: сканирование можно ОСТАНОВИТЬ по ENTER в любой момент
+(core.stopwatch), после остановки — итоги и автовозврат в меню через 5 сек.
 """
 
 import socket
 import subprocess
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 try:
     from core.ui import C
-except ImportError:  # запуск модуля напрямую
+except ImportError:
     from core.ui import C
 
 
@@ -29,7 +31,7 @@ def get_local_interfaces():
     except Exception:
         pass
 
-    # Дополнительно — через `ip addr` (есть в Termux: package install net-tools / iproute2)
+    # Дополнительно — через `ip addr` (Termux: iproute2)
     try:
         out = subprocess.check_output(["ip", "-o", "-4", "addr", "show"],
                                       stderr=subprocess.DEVNULL, text=True)
@@ -63,44 +65,85 @@ def ping_host(ip):
         return False
 
 
-def scan_local_networks(max_hosts=254, workers=40):
-    """Поиск активных хостов в локальных /24-подсетях устройства."""
+def resolve_name(ip):
+    try:
+        return socket.gethostbyaddr(ip)[0]
+    except Exception:
+        return ""
+
+
+def _worker(stop_event, state):
+    """Рабочий поток сканирования (периодически проверяет stop_event)."""
+    found = state.setdefault("found", [])
+    scanned = state.setdefault("scanned", 0)
+
     ips = get_local_interfaces()
     if not ips:
         print(f"{C.RED}  ✖ Не удалось определить локальные IP-адреса.{C.RESET}")
         print(f"{C.DIM}    Проверьте Wi-Fi/мобильные данные и права Termux.{C.RESET}")
-        return []
+        return found
 
     print(f"{C.CYAN}  Локальные адреса:{C.RESET}")
     for ip in ips:
         print(f"    • {ip}  ({subnet_of(ip)})")
 
-    found = []
     lock = threading.Lock()
 
     for ip in ips:
+        if stop_event.is_set():
+            break
         base = ip.rsplit(".", 1)[0]
-        targets = [f"{base}.{i}" for i in range(1, max_hosts + 1) if i != int(ip.rsplit('.', 1)[1])]
+        targets = [f"{base}.{i}" for i in range(1, 255)
+                   if i != int(ip.rsplit(".", 1)[1])]
 
         print(f"\n{C.YELLOW}  ⟳ Сканирую подсеть {base}.0/24 …{C.RESET}\n")
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            results = pool.map(ping_host, targets)
-            for tgt, alive in zip(targets, results):
+
+        with ThreadPoolExecutor(max_workers=40) as pool:
+            futures = {pool.submit(ping_host, t): t for t in targets}
+            for fut in as_completed(futures):
+                if stop_event.is_set():
+                    for f in futures:
+                        f.cancel()
+                    break
+                tgt = futures[fut]
+                with lock:
+                    state["scanned"] += 1
+                try:
+                    alive = fut.result()
+                except Exception:
+                    alive = False
                 if alive:
-                    name = ""
-                    try:
-                        name = socket.gethostbyaddr(tgt)[0]
-                    except Exception:
-                        pass
-                    line = f"    ✔ {tgt:<16} {name}"
-                    print(f"{C.GREEN}{line}{C.RESET}")
+                    name = resolve_name(tgt)
+                    print(f"{C.GREEN}    ✔ {tgt:<16} {name}{C.RESET}")
                     with lock:
                         found.append((tgt, name))
 
-    if not found:
-        print(f"{C.DIM}  Активных хостов не найдено "
-              f"(возможно, сеть блокирует ICMP / нужен root).{C.RESET}")
-    else:
-        print(f"\n{C.BOLD}  Итого найдено хостов: {len(found)}{C.RESET}")
+        if not stop_event.is_set():
+            print(f"{C.DIM}    Просканировано адресов: {state['scanned']}{C.RESET}")
 
     return found
+
+
+def _summary(state, result, stopped_by_user):
+    found = state.get("found", [])
+    scanned = state.get("scanned", 0)
+    if not found:
+        print(f"{C.DIM}  Активных хостов не найдено "
+              f"(просканировано адресов: {scanned}; "
+              f"возможно, сеть блокирует ICMP / нужен root).{C.RESET}")
+    else:
+        print(f"\n{C.BOLD}  ИТОГ:{C.RESET} найдено активных хостов — {len(found)} "
+              f"(просканировано адресов: {scanned})")
+        for tgt, name in found:
+            print(f"    • {tgt:<16} {name}")
+
+
+def scan_local_networks_interactive():
+    """Точка входа пункта меню: сканирование с остановкой по ENTER."""
+    from core.stopwatch import run_with_stop
+    run_with_stop(_worker, title="Сканирование сетей", summary_fn=_summary)
+
+
+# Совместимость со старым прямым вызовом
+def scan_local_networks():
+    return _worker(threading.Event(), {})

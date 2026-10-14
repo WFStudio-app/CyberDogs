@@ -59,7 +59,7 @@ def header(title=""):
         print(f"{C.BOLD}{C.GREEN}  ▶ {title}{C.RESET}")
         print(f"{C.CYAN}{line}{C.RESET}")
     else:
-        print(BANNER.format(c=C.CYAN, r=C.YELLOW, v="0.2.0", s=C.RESET))
+        print(BANNER.format(c=C.CYAN, r=C.YELLOW, v="0.3.0", s=C.RESET))
 
 
 def pause(text="Нажмите ENTER для продолжения…"):

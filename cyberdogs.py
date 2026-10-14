@@ -22,17 +22,16 @@ from modules.attack import wifi_crack, hosts_crack
 
 
 APP_NAME = "CyberDogs"
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 
 
 # ───────────────────────── Сканирование ─────────────────────────
 
 def scan_networks():
-    """Сканирование сетей вокруг (ARP / подсеть)."""
+    """Сканирование сетей вокруг (ARP / подсеть), остановка по ENTER."""
     clear()
     header("Сканирование сетей вокруг")
-    networks.scan_local_networks()
-    pause()
+    networks.scan_local_networks_interactive()   # ⏹ ENTER — стоп, ↩ меню через 5 сек
 
 
 def scan_signals():
@@ -44,11 +43,10 @@ def scan_signals():
 
 
 def scan_wifi():
-    """Сканирование Wi-Fi вокруг."""
+    """Сканирование Wi-Fi вокруг — живой список сетей, остановка по ENTER."""
     clear()
     header("Сканирование Wi-Fi вокруг")
-    wifi.scan_wifi_networks()
-    pause()
+    wifi.scan_wifi_networks_interactive()        # ⏹ ENTER — стоп, ↩ меню через 5 сек
 
 
 def scanning_menu():
