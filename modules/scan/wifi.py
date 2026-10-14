@@ -10,16 +10,14 @@ modules/scan/wifi.py — Сканирование Wi-Fi вокруг (v0.3.0).
   * ОСТАНОВКА по нажатию ENTER в любой момент;
   * после остановки — итоги и автовозврат в главное меню через 5 секунд.
 
-Методы получения данных (от лучшего к запасному):
-  1. nmcli            — если доступен;
-  2. termux-api       — `termux-wifi-scaninfo`;
-  3. iw scan dump     — при root;
-  4. pywifi           — если установлен и интерфейс позволяет;
-  5. запасной вариант — данные текущего подключения.
+Источник данных — ТОЛЬКО Termux:API:
+  * termux-wifi-scan        — запускает активный скан через Android;
+  * termux-wifi-scaninfo    — возвращает результаты скана (JSON);
+  * termux-wifi-connectioninfo — данные текущего подключения (запасной вывод).
+pywifi / nmcli / iw не используются.
 """
 
 import json
-import re
 import shutil
 import subprocess
 import threading
@@ -122,109 +120,75 @@ def sec_label(cap):
 
 # ─────────────── источники данных ───────────────
 
-def parse_nmcli(out):
-    nets = []
-    for line in out.splitlines()[1:]:
-        parts = line.split("\\:")
-        if len(parts) >= 5 and parts[0]:
-            nets.append({"ssid": parts[0], "bssid": parts[1],
-                         "signal": parts[2], "sec": sec_label(parts[3]),
-                         "ch": freq_to_channel(parts[4])})
-    return nets
+def termux_available():
+    """Termux:API доступен? (есть бинарники termux-wifi-*)."""
+    return shutil.which("termux-wifi-scaninfo") is not None
 
 
 def parse_termux(out):
+    """Разобрать JSON-вывод `termux-wifi-scaninfo` → список сетей."""
     try:
         data = json.loads(out)
     except Exception:
         return []
+    if isinstance(data, dict):      # иногда приходит один объект
+        data = [data]
     if not isinstance(data, list):
         return []
     nets = []
     for n in data:
+        if not isinstance(n, dict):
+            continue
+        bssid = n.get("bssid") or n.get("BSSID") or "?"
+        level = n.get("level", n.get("RSSI", "?"))
         nets.append({
-            "ssid":   n.get("ssid") or "<скрытая>",
-            "bssid":  n.get("bssid", "?"),
-            "signal": n.get("level", "?"),
-            "sec":    sec_label(n.get("capabilities", "")),
-            "ch":     freq_to_channel(n.get("frequency", "?")),
+            "ssid":   n.get("ssid") or n.get("SSID") or "<скрытая>",
+            "bssid":  bssid,
+            "signal": level,
+            "sec":    sec_label(n.get("capabilities",
+                                      n.get("security_type", ""))),
+            "ch":     freq_to_channel(n.get("frequency",
+                                            n.get("center_freq0", "?"))),
         })
     return nets
 
 
-def parse_iw_scan(out):
-    nets, cur = [], {}
-    for line in out.splitlines():
-        m = re.match(r"BSS ([0-9a-f:]{17})", line.strip())
-        if m:
-            if cur.get("bssid"):
-                nets.append(cur)
-            cur = {"bssid": m.group(1), "ssid": "", "signal": "?",
-                   "sec": "OPEN", "ch": "?"}
-            continue
-        s = line.strip()
-        if s.startswith("SSID:") and cur.get("bssid"):
-            cur["ssid"] = s[5:].strip() or "<скрытая>"
-        elif s.startswith("signal:") and cur.get("bssid"):
-            cur["signal"] = s.split()[1]
-        elif s.startswith("primary:") and cur.get("bssid"):
-            cur["ch"] = s.split(":")[-1].strip()
-        elif ("IE: WPA" in s or "RSN" in s) and cur.get("bssid"):
-            cur["sec"] = "WPA2" if "RSN" in s else "WPA"
-    if cur.get("bssid"):
-        nets.append(cur)
-    return nets
+def trigger_termux_scan(stop_event):
+    """Запустить активный Wi-Fi-скан средствами Android через Termux:API."""
+    if not shutil.which("termux-wifi-scan"):
+        return False
+    try:
+        subprocess.run(["termux-wifi-scan"], stderr=subprocess.DEVNULL,
+                       stdin=subprocess.DEVNULL, text=True, timeout=10)
+    except Exception:
+        return False
+    stop_event.wait(3)          # даём адаптеру время завершить скан
+    return not stop_event.is_set()
 
 
 def one_shot_scan(stop_event):
-    """Один проход скана любым доступным методом → список сетей или None."""
+    """Один проход скана через Termux:API → список сетей или None."""
     if stop_event.is_set():
         return None
-    out = run(["nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,SECURITY,CHANNEL",
-               "dev", "wifi", "list", "--rescan", "yes"], timeout=20)
-    if out is not None:
-        return parse_nmcli(out)
+    if not termux_available():
+        return None             # Termux:API отсутствует — активного метода нет
+
+    # сначала инициируем свежий скан через Android (если команда доступна)
+    triggered = trigger_termux_scan(stop_event)
+    if stop_event.is_set():
+        return None
 
     out = run(["termux-wifi-scaninfo"], timeout=15)
-    if out is not None:
-        nets = parse_termux(out)
-        if nets:
-            return nets
-
-    dev_out = run(["iw", "dev"], timeout=5)
-    if dev_out:
-        lines = dev_out.splitlines()
-        iface = None
-        for i, l in enumerate(lines):
-            if l.startswith("\tInterface") and i + 1 < len(lines):
-                iface = lines[i + 1].strip()
-                break
-        if iface:
-            run(["iw", "dev", iface, "scan", "flush"], timeout=5)
-            out = run(["iw", "dev", iface, "scan", "trigger"], timeout=10)
-            time.sleep(3)
-            out = run(["iw", "dev", iface, "scan", "dump"], timeout=20)
-            if out:
-                return parse_iw_scan(out)
-
-    try:
-        import pywifi
-        wifi = pywifi.PyWiFi()
-        iface = wifi.interfaces()[0]
-        iface.scan()
-        stop_event.wait(4)
-        res = iface.scan_results()
-        nets = []
-        for r in res:
-            nets.append({"ssid": r.ssid or "<скрытая>", "bssid": r.bssid,
-                         "signal": r.signal, "sec": "WPA?" if r.keymgmts else "OPEN",
-                         "ch": freq_to_channel(r.freq)})
-        if nets:
-            return nets
-    except Exception:
-        pass
-
-    return None  # ни один активный метод недоступен
+    if out is None:
+        return None
+    nets = parse_termux(out)
+    if nets:
+        return nets
+    # если триггер недоступен и кэша нет — активных методов больше нет
+    # (pywifi / nmcli / iw сознательно убраны в пользу Termux:API)
+    if not triggered:
+        return None
+    return []
 
 
 # ─────────────── отрисовка таблицы ───────────────
@@ -294,10 +258,10 @@ def _worker(stop_event, state):
 def _summary(state, result, stopped_by_user):
     nets = state.get("nets", {})
     if state.get("no_active_method"):
-        print(f"{C.RED}  ✖ Активное сканирование Wi-Fi из Termux без root недоступно.{C.RESET}")
-        print(f"{C.DIM}    Android ограничивает Wi-Fi-скан для приложений.{C.RESET}")
-        print(f"{C.DIM}    Варианты: 1) установить Termux:API (pkg install termux-api"
-              f" + приложение Termux:API из F-Droid), 2) root + iw/nmcli.{C.RESET}\n")
+        print(f"{C.RED}  ✖ Termux:API недоступен — сканирование невозможно.{C.RESET}")
+        print(f"{C.DIM}    Все данные о Wi-Fi сетях берутся только через Termux:API.{C.RESET}")
+        print(f"{C.DIM}    Установка: pkg install termux-api +"
+              f" приложение Termux:API из F-Droid.{C.RESET}\n")
         _show_current_connection()
         return
     if not nets:

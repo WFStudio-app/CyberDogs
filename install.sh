@@ -14,7 +14,7 @@ echo "[*] Сетевые утилиты (для сканирования сет�
 pkg install -y nmap iproute2 termux-api || true
 
 echo "[*] Python-библиотеки для раздела «Подбор / Взлом»…"
-pip install --upgrade pywifi paramiko || true
+pip install --upgrade paramiko || true
 
 echo ""
 echo "[✔] Готово! Не забудьте:"
