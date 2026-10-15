@@ -18,7 +18,8 @@ import time
 import socket
 
 from core.ui import C, header, pause
-from modules.attack.wifi_crack import DICTIONARIES, BASE_DIR, dict_path
+from modules.attack.wifi_crack import (DICTIONARIES, BASE_DIR, dict_path,
+                                       print_attempt, wipe_wrong_lines)
 
 def _delay():
     """Шаг подбора из настроек (~/.cyberos/config.json), по умолчанию 0.1 сек."""
@@ -163,6 +164,7 @@ def main(service="ssh"):
     start = time.time()
     found = None
     stopped_by_user = False
+    printed_lines = 0          # сколько строк-попыток выведено на экран
     _, stop = _enter_stop_event()
     try:
         for i, pwd in enumerate(passwords, 1):
@@ -183,16 +185,9 @@ def main(service="ssh"):
                     stopped_by_user = True
                     break
 
-            elapsed = time.time() - start
-            speed = i / elapsed if elapsed > 0 else 0
-            bar_len = 24
-            filled = int(bar_len * i / total)
-            bar = "█" * filled + "░" * (bar_len - filled)
-            sys.stdout.write(
-                f"\r  {C.CYAN}[{bar}]{C.RESET} {i}/{total} "
-                f"({i * 100 // total}%) · {pwd[:18]:<18} · {speed:.1f} п/с  "
-            )
-            sys.stdout.flush()
+            # ── каждая попытка — новой строкой с итогом ──
+            print_attempt(i, total, pwd, ok)
+            printed_lines += 1
 
             if ok:
                 found = pwd
@@ -213,7 +208,14 @@ def main(service="ssh"):
     log_dir = os.path.join(BASE_DIR, "logs")
     os.makedirs(log_dir, exist_ok=True)
     if found:
-        print(f"\n{C.GREEN}{C.BOLD}  [ok] ДОСТУП ПОЛУЧЕН: {user}@{host}:{port} · пароль: {found}{C.RESET}")
+        # ── удаляем все неверные строки, оставляем только верный пароль ──
+        wipe_wrong_lines(printed_lines)
+        print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
+        print(f"{C.GREEN}{C.BOLD}  [OK] ДОСТУП ПОЛУЧЕН:{C.RESET} "
+              f"{user}@{host}:{port} · {C.BOLD}{found}{C.RESET}")
+        print(f"  {C.DIM}все неверные строки удалены · проверено попыток: "
+              f"{printed_lines}{C.RESET}")
+        print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
         with open(os.path.join(log_dir, "hosts_crack.log"), "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {service} {user}@{host}:{port} пароль={found}\n")
     elif demo and not stopped_by_user:

