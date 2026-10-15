@@ -28,8 +28,8 @@ from modules.attack import wifi_crack, hosts_crack
 from modules import tools, usb
 
 APP_NAME = "CyberDogs"
-KERNEL = "CyberOS Kernel 1.0.0-cyber"
-VERSION = "1.0.0"
+KERNEL = "CyberOS Kernel 1.1.0-cyber"
+VERSION = "1.1.0"
 ui.set_version(VERSION)
 
 HOME = os.path.expanduser("~")
@@ -121,8 +121,17 @@ class Shell(object):
             "ping": self.app_ping, "ifconfig": self.app_ifconfig,
             "tools": self.app_tools_menu, "menu": self.app_cyberdogs_menu,
             "tty": self.cmd_tty, "goto": self.cmd_goto, "alias": self.cmd_alias,
+            # пакетный менеджер Truck и настройки ОС
+            "trk": _c(cmds.cmd_trk), "truck": _c(cmds.cmd_trk),
+            "settings": self.cmd_settings,
         }
         return r
+
+    def cmd_settings(self, args):
+        """Открыть раздел «Настройки» прямо из терминала."""
+        from modules.settings import settings_menu
+        self.syslog("open settings from shell")
+        settings_menu()
 
     # ── встроенные команды шелла ──────────────────────────────
     def cmd_help(self, args):

@@ -20,7 +20,16 @@ import socket
 from core.ui import C, header, pause
 from modules.attack.wifi_crack import DICTIONARIES, BASE_DIR, dict_path
 
-DELAY = 0.1
+def _delay():
+    """Шаг подбора из настроек (~/.cyberos/config.json), по умолчанию 0.1 сек."""
+    try:
+        from modules import settings
+        return max(0.01, settings.load().get("crack_delay_ms", 100) / 1000.0)
+    except Exception:
+        return 0.1
+
+
+DELAY = _delay()
 
 DEFAULT_PORTS = {"ssh": 22, "ftp": 21}
 
@@ -147,7 +156,7 @@ def main(service="ssh"):
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.BOLD}  [target]  Цель: {user}@{host}:{port} ({service.upper()}){mode_tag}{C.RESET}")
     print(f"{C.BOLD}  [dict]  Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
-    print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
+    print(f"{C.BOLD}  [t]  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
 

@@ -46,6 +46,21 @@ C.disable_if_not_tty()
 
 ACCENT = C.MAGENTA          # фирменный цвет акцентов CyberDogs
 
+# Пользовательские настройки отображения (ставит modules/settings.apply()):
+CFG_FLAGS = {"clock_24h": True, "show_status_bar": True}
+
+
+def set_display_flags(clock_24h=None, show_status_bar=None):
+    if clock_24h is not None:
+        CFG_FLAGS["clock_24h"] = bool(clock_24h)
+    if show_status_bar is not None:
+        CFG_FLAGS["show_status_bar"] = bool(show_status_bar)
+
+
+def _time_fmt():
+    """Формат часов: 24-часовой или 12-часовой (по настройке)."""
+    return "%H:%M:%S" if CFG_FLAGS.get("clock_24h", True) else "%I:%M:%S %p"
+
 # Версия приложения: ставится cyberdogs.py при импорте (единый источник — там).
 APP_VERSION = "dev"
 
@@ -103,17 +118,97 @@ def box(title="", width=52, color=None):
 
 
 def status_bar():
-    """Строка статуса под баннером: устройство · время · Termux."""
+    """Строка статуса под баннером: устройство · время (live) · Termux.
+
+    Время обновляется каждую секунду по реальному часовому поясу устройства
+    (time.strftime учитывает локальную TZ). Пока идёт ввод пользователя,
+    фоновый поток перезаписывает строку в буфере вывода; перед input()
+    вызывающий код должен остановить поток через stop_clock().
+    """
+    stop_clock()
     host = platform.system() or "?"
     py = platform.python_version()
-    now = time.strftime("%H:%M:%S")
     tmx = termux_version()
     parts = [f"OS: {host}", f"Py: {py}"]
     if tmx:
         parts.append(f"Termux: {tmx}")
-    parts.append(f" {now}")
-    txt = f"  {' · '.join(parts)}  "
-    print(f"{C.BG_DARK}{C.GRAY}{txt}{C.RESET}")
+    _STATUS_LINE = max(1, _visible_len("  " + " · ".join(parts) + " 00:00:00  "))
+    global _CLOCK_TEXT, _CLOCK_WIDTH
+    _CLOCK_TEXT = "  " + " · ".join(parts) + " "
+    _CLOCK_WIDTH = _STATUS_LINE
+    # печать самой строки (позиция курсора — сразу после неё)
+    sys.stdout.write(f"{C.BG_DARK}{C.GRAY}{_pad(_clock_stamp())}{C.RESET}")
+    sys.stdout.flush()
+    _start_clock()
+
+
+_clock_thread = None
+_clock_stop = None
+_CLOCK_TEXT = ""
+_CLOCK_WIDTH = 30
+
+
+def _clock_stamp():
+    return time.strftime(_time_fmt() + " %Z").strip()
+
+
+def _pad(stamp):
+    """Строка статуса фиксированной ширины с часами справа."""
+    left = _CLOCK_TEXT
+    room = max(6, _CLOCK_WIDTH - len(left))
+    return (left + stamp)[-room:].rjust(_CLOCK_WIDTH - len(left)) + stamp \
+        if False else (left + " " * max(1, _CLOCK_WIDTH - len(left) - len(stamp))
+                       + stamp)[:_CLOCK_WIDTH]
+
+
+def _start_clock():
+    """Фоновое обновление часов в статус-баре раз в секунду."""
+    global _clock_thread, _clock_stop
+    import threading
+    if not sys.stdout.isatty():
+        return
+    _clock_stop = threading.Event()
+
+    def _loop():
+        last = ""
+        while not _clock_stop.wait(0.5):
+            stamp = _clock_stamp()
+            if stamp == last:
+                continue
+            last = stamp
+            line = _pad(stamp)
+            # перезапись только той строки, где стоит курсор (после статуса)
+            sys.stdout.write(f"\r{C.BG_DARK}{C.GRAY}{line}{C.RESET}\r")
+            sys.stdout.flush()
+
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
+    _clock_thread = t
+
+
+def stop_clock():
+    """Остановить фоновые часы (вызывать перед новым выводом/input)."""
+    global _clock_thread, _clock_stop
+    if _clock_stop is not None:
+        _clock_stop.set()
+    _clock_thread = None
+
+
+def credit_line():
+    """Надпись под логом: автор и назначение инструмента."""
+    txt = ("By Wolchic | Тг - @weqec | "
+           "Инструмент для хакинга и реверс-инжиниринга")
+    print(f"{C.YELLOW}{C.BOLD}  {txt}{C.RESET}")
+
+
+def _restart_clock():
+    """Перезапустить фоновые часы (после input()/вывода)."""
+    if not sys.stdout.isatty():
+        return
+    global _clock_thread, _clock_stop
+    if _clock_thread is not None and _clock_thread.is_alive():
+        return
+    _start_clock()
 
 
 def clear():
@@ -122,7 +217,7 @@ def clear():
 
 
 def header(title=""):
-    """Печать баннера или заголовка раздела."""
+    """Печать баннера (с надписью автора под лого) или заголовка раздела."""
     if title:
         line = "═" * 50
         print(f"{ACCENT}{line}{C.RESET}")
@@ -131,7 +226,11 @@ def header(title=""):
     else:
         print(BANNER.format(c=C.CYAN, m=ACCENT, r=C.YELLOW,
                             v=APP_VERSION, s=C.RESET))
-        status_bar()
+        credit_line()
+        if CFG_FLAGS.get("show_status_bar", True):
+            status_bar()
+        else:
+            stop_clock()
 
 
 def pause(text="Нажмите ENTER для продолжения…"):
@@ -148,6 +247,10 @@ def menu_loop(title, items, banner=False):
 
     items: список кортежей (название, callback).
            callback=None → выход из меню («Назад» / «Выход»).
+    Часы в статус-баре обновляются каждую секунду по реальному времени
+    устройства; перед input() поток часов останавливается, после ввода —
+    перезапускается, поэтому ожидание ввода не мешает тиканью между
+    действиями пользователя.
     """
     while True:
         clear()
@@ -164,10 +267,12 @@ def menu_loop(title, items, banner=False):
         print(f"{C.DIM}  ─{'─' * 40}")
         print(f"{C.DIM}  » Подсказка: ввод 01 — быстрый возврат в главное меню{C.RESET}")
         print()
+        stop_clock()          # часы не должны мешать вводу
         try:
             choice = input(f"{C.GREEN}  cyberdogs/{title.split()[0].lower()}> {C.RESET}").strip()
         except EOFError:
             break
+        _restart_clock()      # вернуть живые часы до следующей отрисовки
 
         # Пустой ввод — ничего не делаем
         if not choice:

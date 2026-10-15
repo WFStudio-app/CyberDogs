@@ -33,7 +33,16 @@ BASE_DIR = os.path.dirname(os.path.dirname(
 # Папка со словарями для подбора паролей
 WORDLISTS_DIR = os.path.join(BASE_DIR, "wordlists")
 
-DELAY = 0.1  # шаг подбора — каждые 0.1 секунды
+def _delay():
+    """Шаг подбора из настроек (~/.cyberos/config.json), по умолчанию 0.1 сек."""
+    try:
+        from modules import settings
+        return max(0.01, settings.load().get("crack_delay_ms", 100) / 1000.0)
+    except Exception:
+        return 0.1
+
+
+DELAY = _delay()  # шаг подбора — каждые 0.1 секунды (настраивается в «Настройки»)
 
 DICTIONARIES = [
     ("1. Подбор из цифр (Easy pass)", "pn_e00001.txt"),
@@ -169,7 +178,7 @@ def _try_connect(ssid, pwd):
         return False
     ok = False
     info_exe = api_bin("termux-wifi-info")
-    steps = max(1, int(DELAY * 10))
+    steps = max(1, int(round(DELAY * 10)))
     for _ in range(steps):        # короткое ожидание статуса
         time.sleep(0.1)
         try:
@@ -248,7 +257,7 @@ def run_attack(ssid, dict_path, demo=False):
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.BOLD}  [target]  Цель: {ssid}{mode_tag}{C.RESET}")
     print(f"{C.BOLD}  [dict]  Словарь: {os.path.basename(dict_path)} · всего паролей: {total:,}".replace(',', ' ') + C.RESET)
-    print(f"{C.BOLD}  ⏱  Шаг подбора: {DELAY} сек{C.RESET}")
+    print(f"{C.BOLD}  [t]  Шаг подбора: {DELAY} сек{C.RESET}")
     print(f"{C.CYAN}  {'═' * 46}{C.RESET}")
     print(f"{C.DIM}  ENTER — остановить подбор и выйти в меню · Ctrl+C — тоже стоп.{C.RESET}\n")
 

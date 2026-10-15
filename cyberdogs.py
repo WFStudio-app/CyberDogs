@@ -16,18 +16,22 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from core.ui import header, clear, pause, menu_loop, box, key_hint, C, ACCENT
+from core.ui import (header, clear, pause, menu_loop, box, key_hint, C, ACCENT,
+                     stop_clock)
 import core.ui as ui
+import core.truck as truck
 from modules.scan import networks, signals, wifi
 from modules.attack import wifi_crack, hosts_crack
-from modules import tools, usb
+from modules import tools, usb, settings
 
 
 APP_NAME = "CyberDogs"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 # единый источник версии для баннера (core.ui)
 ui.set_version(VERSION)
+# применяем пользовательские настройки (акцентный цвет и т.п.)
+settings.apply()
 
 
 # ───────────────────────── Сканирование ─────────────────────────
@@ -136,15 +140,42 @@ def games_menu():
     pause("Нажмите ENTER чтобы вернуться в главное меню…")
 
 
+# ───────────────────────── Терминал (Truck) ─────────────────────────
+
+def terminal_entry():
+    """Пункт 1 главного меню — Терминал CyberOS с пакетным менеджером Truck.
+
+    Полноценный шелл cyber-sh со всеми командами ОС; внутри работает
+    пакетный менеджер Truck: trk install <pkg>, trk list, trk search и т.д.
+    Выход из терминала (exit / Ctrl-D) — возврат в главное меню.
+    """
+    import cyberos
+    ui.set_version(cyberos.VERSION)   # версия ОС единая, не сбрасывается
+    settings.apply()                  # пользовательский акцент — в шелле тоже
+    sh = cyberos.Shell()
+    if not os.path.isfile(cyberos.USERS_FILE):
+        # нет учётной записи — создаём прямо здесь
+        cyberos.first_boot_setup(sh)
+    sh.syslog("terminal session from main menu")
+    print(f"{C.DIM}  Терминал CyberOS {cyberos.VERSION} · пакетный менеджер: "
+          f"trk (trk help) · выход: exit{C.RESET}")
+    sh.repl()
+    # после выхода из шелля — снова наше фирменное оформление меню
+    ui.set_version(VERSION)
+    settings.apply()
+
+
 # ───────────────────────── Главное меню ─────────────────────────
 
 def main_menu():
     items = [
-        ("1. Сканирование",   scanning_menu),
-        ("2. Подбор / Взлом", attack_menu),
-        ("3. USB",            usb_menu),
-        ("4. Инструменты",    tools_menu),
-        ("5. Игры",           games_menu),
+        ("1. Терминал",       terminal_entry),
+        ("2. Сканирование",   scanning_menu),
+        ("3. Подбор / Взлом", attack_menu),
+        ("4. USB",            usb_menu),
+        ("5. Инструменты",    tools_menu),
+        ("6. Игры",           games_menu),
+        ("9. Настройки",      settings.settings_menu),
         ("0. Выход", None),
     ]
     menu_loop(f"{APP_NAME} v{VERSION}", items, banner=True)

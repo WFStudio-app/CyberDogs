@@ -139,3 +139,10 @@ def cmd_uname(sh, args):
 
 def cmd_clear(sh, args):
     sh.ui.clear()
+
+
+def cmd_trk(sh, args):
+    """Пакетный менеджер Truck: trk install/remove/list/search/info/update..."""
+    from core import truck
+    sh.syslog("trk " + " ".join(args) if args else "trk (usage)")
+    truck.run(list(args))
