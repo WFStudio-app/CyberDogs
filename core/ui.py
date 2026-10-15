@@ -117,81 +117,56 @@ def box(title="", width=52, color=None):
     return width
 
 
-def status_bar():
-    """Строка статуса под баннером: устройство · время (live) · Termux.
+# ── статус-бар: ОДНА фиксированная строка под логотипом главного меню ──
+# Реализация без ANSI-перезаписей и фоновых потоков: строка печатается
+# как обычный текст (на своей строке с переводом), поэтому она не может
+# «прыгать» по экрану или уезжать вверх/вниз вместе с чужим выводом.
+# Часы обновляются перерисовкой всего меню раз в секунду (см. main_menu).
 
-    Время обновляется каждую секунду по реальному часовому поясу устройства
-    (time.strftime учитывает локальную TZ). Пока идёт ввод пользователя,
-    фоновый поток перезаписывает строку в буфере вывода; перед input()
-    вызывающий код должен остановить поток через stop_clock().
-    """
-    stop_clock()
+_STATUS_TEXT = ""          # левая часть строки статуса (кэш)
+
+
+def status_text():
+    """Текст строки статуса: ОС · Python · Termux · текущее время."""
     host = platform.system() or "?"
     py = platform.python_version()
     tmx = termux_version()
     parts = [f"OS: {host}", f"Py: {py}"]
     if tmx:
         parts.append(f"Termux: {tmx}")
-    _STATUS_LINE = max(1, _visible_len("  " + " · ".join(parts) + " 00:00:00  "))
-    global _CLOCK_TEXT, _CLOCK_WIDTH
-    _CLOCK_TEXT = "  " + " · ".join(parts) + " "
-    _CLOCK_WIDTH = _STATUS_LINE
-    # печать самой строки (позиция курсора — сразу после неё)
-    sys.stdout.write(f"{C.BG_DARK}{C.GRAY}{_pad(_clock_stamp())}{C.RESET}")
-    sys.stdout.flush()
-    _start_clock()
+    stamp = time.strftime(_time_fmt() + " %Z").strip()
+    return "  " + " · ".join(parts) + f" · {stamp}"
 
 
-_clock_thread = None
-_clock_stop = None
-_CLOCK_TEXT = ""
-_CLOCK_WIDTH = 30
+def status_bar():
+    """Печать строки статуса ПОД логом — обычным print(), одной строкой.
+
+    Вызывается только из header(live=True), то есть только в главном меню.
+    Никаких фоновых потоков и \\r-перезаписей: строка статична, а время в
+    ней обновляет сам цикл главного меню перерисовкой экрана.
+    """
+    global _STATUS_TEXT
+    _STATUS_TEXT = status_text()
+    print(f"{C.BG_DARK}{C.GRAY}{_STATUS_TEXT}   {C.RESET}")
+
+
+def stop_clock():
+    """Совместимость со старым кодом: фоновых часов больше нет."""
+    pass
+
+
+def _start_clock():
+    """Совместимость со старым кодом: фоновых часов больше нет."""
+    pass
+
+
+def _restart_clock():
+    """Совместимость со старым кодом: фоновых часов больше нет."""
+    pass
 
 
 def _clock_stamp():
     return time.strftime(_time_fmt() + " %Z").strip()
-
-
-def _pad(stamp):
-    """Строка статуса фиксированной ширины с часами справа."""
-    left = _CLOCK_TEXT
-    room = max(6, _CLOCK_WIDTH - len(left))
-    return (left + stamp)[-room:].rjust(_CLOCK_WIDTH - len(left)) + stamp \
-        if False else (left + " " * max(1, _CLOCK_WIDTH - len(left) - len(stamp))
-                       + stamp)[:_CLOCK_WIDTH]
-
-
-def _start_clock():
-    """Фоновое обновление часов в статус-баре раз в секунду."""
-    global _clock_thread, _clock_stop
-    import threading
-    if not sys.stdout.isatty():
-        return
-    _clock_stop = threading.Event()
-
-    def _loop():
-        last = ""
-        while not _clock_stop.wait(0.5):
-            stamp = _clock_stamp()
-            if stamp == last:
-                continue
-            last = stamp
-            line = _pad(stamp)
-            # перезапись только той строки, где стоит курсор (после статуса)
-            sys.stdout.write(f"\r{C.BG_DARK}{C.GRAY}{line}{C.RESET}\r")
-            sys.stdout.flush()
-
-    t = threading.Thread(target=_loop, daemon=True)
-    t.start()
-    _clock_thread = t
-
-
-def stop_clock():
-    """Остановить фоновые часы (вызывать перед новым выводом/input)."""
-    global _clock_thread, _clock_stop
-    if _clock_stop is not None:
-        _clock_stop.set()
-    _clock_thread = None
 
 
 def credit_line():
@@ -221,9 +196,9 @@ def header(title="", live=False):
 
     Строка статуса с ОС/Python/временем печатается ТОЛЬКО когда live=True
     (главное меню cyberdogs.py): она стоит одним фиксированным местом —
-    сразу под лого, и обновляется каждую секунду фоновым потоком часов.
+    сразу под лого, и обновляется каждую секунду перерисовкой меню.
     Внутри терминала и во всех остальных экранах live=False — статус-бара
-    нет, часы не тикают в фоне и не мешают выводу шелла.
+    нет, строка нигде больше не появляется.
     """
     if title:
         line = "═" * 50
@@ -236,8 +211,49 @@ def header(title="", live=False):
         credit_line()
         if live and CFG_FLAGS.get("show_status_bar", True):
             status_bar()
-        else:
-            stop_clock()
+
+
+def timed_input(prompt, timeout=1.0):
+    """Чтение строки с таймаутом (для живых часов в главном меню).
+
+    Возвращает (got_eol, text):
+      got_eol=True  — пользователь нажал ENTER, text = введённая строка;
+      got_eol=False — истёк таймаут, text = уже набранное (ещё не Enter).
+
+    Реализация через select() на POSIX; на других системах — обычный input().
+    """
+    if os.name != "posix" or not sys.stdin.isatty():
+        try:
+            return True, input(prompt)
+        except EOFError:
+            return True, ""
+    import select
+    buf = b""
+    while True:
+        try:
+            ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        except (OSError, ValueError):
+            return True, ""
+        if not ready:
+            return False, buf.decode(errors="ignore")
+        ch = os.read(sys.stdin.fileno(), 1)
+        if ch in (b"\n", b"\r"):
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+            return True, buf.decode(errors="ignore")
+        if ch == b"\x7f":          # backspace
+            if buf:
+                buf = buf[:-1]
+                sys.stdout.write("\b \b")
+                sys.stdout.flush()
+            continue
+        if ch == b"\x03":          # Ctrl-C
+            raise KeyboardInterrupt
+        if ch == b"\x04":          # Ctrl-D
+            return True, buf.decode(errors="ignore")
+        buf += ch
+        sys.stdout.write(ch.decode(errors="ignore"))
+        sys.stdout.flush()
 
 
 def pause(text="Нажмите ENTER для продолжения…"):
@@ -254,32 +270,57 @@ def menu_loop(title, items, banner=False):
 
     items: список кортежей (название, callback).
            callback=None → выход из меню («Назад» / «Выход»).
-    Часы в статус-баре обновляются каждую секунду по реальному времени
-    устройства; перед input() поток часов останавливается, после ввода —
-    перезапускается, поэтому ожидание ввода не мешает тиканью между
-    действиями пользователя.
+
+    В главном меню (banner=True) экран перерисовывается раз в секунду,
+    поэтому строка статуса с часами стоит всегда на одном фиксированном
+    месте — сразу под логом — и показывает реальное время устройства.
+    В остальных меню — обычное ожидание ввода без статус-бара.
     """
-    while True:
+    def _render():
         clear()
         if banner:
             header(live=True)     # статус-бар с часами — только в главном меню
         else:
             header(title)
-
-        # Список пунктов — с иконками-боксами
         for name, cb in items:
             color = C.DIM if cb is None else C.YELLOW
             print(f"  {color}{name}{C.RESET}")
-
         print(f"{C.DIM}  ─{'─' * 40}")
-        print(f"{C.DIM}  » Подсказка: ввод 01 — быстрый возврат в главное меню{C.RESET}")
+        print(f"{C.DIM}  » Подсказка: ввод 01 — быстрый возврат "
+              f"в главное меню{C.RESET}")
         print()
-        stop_clock()          # часы не должны мешать вводу
+
+    while True:
+        _render()
+        prompt = f"{C.GREEN}  cyberdogs/{title.split()[0].lower()}> {C.RESET}"
         try:
-            choice = input(f"{C.GREEN}  cyberdogs/{title.split()[0].lower()}> {C.RESET}").strip()
+            if banner:
+                # живой режим: ждём ввод по секундным тикам; если прошла
+                # секунда и ничего не набрано — перерисовываем экран,
+                # часы в статус-баре идут по реальному времени.
+                choice = ""
+                typed = ""
+                redraw_prompt = True
+                while True:
+                    p = prompt if redraw_prompt else ""
+                    got_eol, text = timed_input(p, timeout=1.0)
+                    if got_eol:
+                        choice = (typed + text).strip()
+                        break
+                    if not text or text == typed:
+                        # ничего нового не набрано — полная перерисовка
+                        typed = ""
+                        redraw_prompt = True
+                        _render()
+                        continue
+                    # пользователь печатает — не перерисовываем экран,
+                    # чтобы не затирать уже набранные символы
+                    typed = text
+                    redraw_prompt = False
+            else:
+                choice = input(prompt).strip()
         except EOFError:
             break
-        _restart_clock()      # вернуть живые часы до следующей отрисовки
 
         # Пустой ввод — ничего не делаем
         if not choice:

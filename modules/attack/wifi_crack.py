@@ -185,9 +185,43 @@ def _choose_dictionary():
 # ─────────────── реальная атака через Termux:API ───────────────
 
 def _termux_connectable():
-    """Есть ли Termux:API для реальной проверки паролей."""
-    return (api_bin("termux-wifi-connect") is not None
-            and api_bin("termux-wifi-info") is not None)
+    """Есть ли Termux:API для реальной проверки паролей.
+
+    ИСПРАВЛЕНИЕ ложного «Termux:API недоступен»: раньше проверка была
+    только по наличию файлов termux-wifi-connect / termux-wifi-connectioninfo, и
+    если бинарник находился, но не запускался (например, сервис Termux:API
+    ещё не поднялся), модуль уходил в демо-режим. Теперь дополнительно
+    делаем живой прогон `termux-wifi-connectioninfo`: если он возвращает JSON — API
+    работает, режим боевой. Результат кешируется на время одного запуска.
+    """
+    global _CONNECTABLE_CACHE
+    if _CONNECTABLE_CACHE is not None:
+        return _CONNECTABLE_CACHE
+    ok = (api_bin("termux-wifi-connect") is not None)
+    if not ok:
+        # connect-обёртки нет — пробуем хотя бы connectioninfo (старые версии api)
+        ok = api_bin("termux-wifi-connectioninfo") is not None
+    if ok:
+        # живой тест: реально запускаем connectioninfo; пустой/недоступный вывод
+        # не считается отказом — JSON может быть и {} при выключенном Wi-Fi,
+        # поэтому требованием считаем сам факт запуска (код возврата 0).
+        import subprocess
+        info_exe = api_bin("termux-wifi-connectioninfo")
+        if info_exe:
+            try:
+                r = subprocess.run([info_exe], capture_output=True, text=True,
+                                   timeout=8, stdin=subprocess.DEVNULL)
+                if r.returncode != 0 and not (r.stdout or "").strip():
+                    ok = False
+            except Exception:
+                # запуск упал по таймауту/праву — не блокируем боевой режим,
+                # если бинарники на месте: попробуем подключаться напрямую
+                ok = True
+    _CONNECTABLE_CACHE = ok
+    return ok
+
+
+_CONNECTABLE_CACHE = None
 
 
 def _try_connect(ssid, pwd):
@@ -224,7 +258,7 @@ def _try_connect(ssid, pwd):
     if "wrong password" in out or "password" in out:
         return False
     # неясный ответ — сверимся с фактическим подключением
-    info_exe = api_bin("termux-wifi-info")
+    info_exe = api_bin("termux-wifi-connectioninfo")
     if info_exe:
         import json
         try:
