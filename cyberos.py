@@ -29,7 +29,7 @@ from modules import tools, usb
 
 APP_NAME = "CyberDogs"
 KERNEL = "CyberOS Kernel 1.1.0-cyber"
-VERSION = "1.1.0"
+VERSION = "1.2.6"
 ui.set_version(VERSION)
 
 HOME = os.path.expanduser("~")
