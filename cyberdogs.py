@@ -26,7 +26,7 @@ from modules import tools, usb, settings, updates
 
 
 APP_NAME = "CyberDogs"
-VERSION = "1.2.3"
+VERSION = "1.2.6"
 
 # единый источник версии для баннера (core.ui)
 ui.set_version(VERSION)
