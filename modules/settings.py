@@ -18,8 +18,7 @@ CFG_PATH = os.path.join(CFG_DIR, "config.json")
 
 DEFAULTS = {
     "accent_color": "magenta",   # фирменный цвет акцентов
-    "clock_24h": True,           # формат времени (влияет на статус-бар/шелл)
-    "show_status_bar": True,     # показывать строку статуса под баннером
+    "clock_24h": True,           # формат времени (12/24 часа)
     "crack_delay_ms": 100,       # задержка между паролями при подборе, мс
     "sound": False,              # звуковые сигналы (termux-toast / bell)
     "vibrate": False,            # вибрация (termux-vibrate)
@@ -53,7 +52,7 @@ def save(cfg):
 
 
 def apply():
-    """Применить конфиг к UI (акцентный цвет, формат часов, статус-бар).
+    """Применить конфиг к UI (акцентный цвет, формат часов).
 
     Вызывать при старте и после изменения настроек.
     """
@@ -62,8 +61,7 @@ def apply():
     col = ACCENT_MAP.get(cfg.get("accent_color", "magenta"))
     if col:
         ui.ACCENT = col
-    ui.set_display_flags(clock_24h=cfg.get("clock_24h", True),
-                         show_status_bar=cfg.get("show_status_bar", True))
+    ui.set_display_flags(clock_24h=cfg.get("clock_24h", True))
     return cfg
 
 
@@ -95,8 +93,9 @@ def set_accent():
 
 def toggle(key, label):
     cfg = load()
-    cfg[key] = not cfg[key]
+    cfg[key] = not cfg.get(key)
     save(cfg)
+    apply()
     state = "ВКЛ" if cfg[key] else "выкл"
     color = C.GREEN if cfg[key] else C.DIM
     print(f"  {C.YELLOW}[>]{C.RESET} {label}: {color}{state}{C.RESET}")
@@ -153,13 +152,12 @@ def settings_menu():
     items = [
         ("1. Акцентный цвет интерфейса",  set_accent),
         ("2. Дисплей: 24-часовой формат", lambda: toggle("clock_24h", "24-часовой формат")),
-        ("3. Дисплей: строка статуса",    lambda: toggle("show_status_bar", "строка статуса")),
-        ("4. Дисплей: тема dark/mono",    lambda: toggle("theme_mono", "монохромная тема")),
-        ("5. Подбор: скорость перебора",  set_crack_speed),
-        ("6. Звуковые сигналы",           lambda: toggle("sound", "звук")),
-        ("7. Вибрация (Termux)",          lambda: toggle("vibrate", "вибрация")),
-        ("8. О системе и конфиге",        show_info),
-        ("9. Сброс настроек",             reset_cfg),
+        ("3. Дисплей: тема dark/mono",    lambda: toggle("theme_mono", "монохромная тема")),
+        ("4. Подбор: скорость перебора",  set_crack_speed),
+        ("5. Звуковые сигналы",           lambda: toggle("sound", "звук")),
+        ("6. Вибрация (Termux)",          lambda: toggle("vibrate", "вибрация")),
+        ("7. О системе и конфиге",        show_info),
+        ("8. Сброс настроек",             reset_cfg),
         ("01. ← Главное меню",            None),
         ("0.  ← Назад",                   None),
     ]

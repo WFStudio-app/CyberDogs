@@ -47,14 +47,12 @@ C.disable_if_not_tty()
 ACCENT = C.MAGENTA          # фирменный цвет акцентов CyberDogs
 
 # Пользовательские настройки отображения (ставит modules/settings.apply()):
-CFG_FLAGS = {"clock_24h": True, "show_status_bar": True}
+CFG_FLAGS = {"clock_24h": True}
 
 
-def set_display_flags(clock_24h=None, show_status_bar=None):
+def set_display_flags(clock_24h=None):
     if clock_24h is not None:
         CFG_FLAGS["clock_24h"] = bool(clock_24h)
-    if show_status_bar is not None:
-        CFG_FLAGS["show_status_bar"] = bool(show_status_bar)
 
 
 def _time_fmt():
@@ -117,56 +115,25 @@ def box(title="", width=52, color=None):
     return width
 
 
-# ── статус-бар: ОДНА фиксированная строка под логотипом главного меню ──
-# Реализация без ANSI-перезаписей и фоновых потоков: строка печатается
-# как обычный текст (на своей строке с переводом), поэтому она не может
-# «прыгать» по экрану или уезжать вверх/вниз вместе с чужим выводом.
-# Часы обновляются перерисовкой всего меню раз в секунду (см. main_menu).
-
-_STATUS_TEXT = ""          # левая часть строки статуса (кэш)
-
-
-def status_text():
-    """Текст строки статуса: ОС · Python · Termux · текущее время."""
-    host = platform.system() or "?"
-    py = platform.python_version()
-    tmx = termux_version()
-    parts = [f"OS: {host}", f"Py: {py}"]
-    if tmx:
-        parts.append(f"Termux: {tmx}")
-    stamp = time.strftime(_time_fmt() + " %Z").strip()
-    return "  " + " · ".join(parts) + f" · {stamp}"
-
-
-def status_bar():
-    """Печать строки статуса ПОД логом — обычным print(), одной строкой.
-
-    Вызывается только из header(live=True), то есть только в главном меню.
-    Никаких фоновых потоков и \\r-перезаписей: строка статична, а время в
-    ней обновляет сам цикл главного меню перерисовкой экрана.
-    """
-    global _STATUS_TEXT
-    _STATUS_TEXT = status_text()
-    print(f"{C.BG_DARK}{C.GRAY}{_STATUS_TEXT}   {C.RESET}")
+# Строка статуса (ОС · Python · Termux · время) УДАЛЕНА по требованию
+# пользователя: нигде в интерфейсе она не выводится. Функции stop_clock /
+# _restart_clock оставлены как пустые заглушки для обратной совместимости
+# со старыми вызовами.
 
 
 def stop_clock():
-    """Совместимость со старым кодом: фоновых часов больше нет."""
+    """Совместимость со старым кодом: статус-бара больше нет."""
     pass
 
 
 def _start_clock():
-    """Совместимость со старым кодом: фоновых часов больше нет."""
+    """Совместимость со старым кодом: статус-бара больше нет."""
     pass
 
 
 def _restart_clock():
-    """Совместимость со старым кодом: фоновых часов больше нет."""
+    """Совместимость со старым кодом: статус-бара больше нет."""
     pass
-
-
-def _clock_stamp():
-    return time.strftime(_time_fmt() + " %Z").strip()
 
 
 def credit_line():
@@ -174,16 +141,6 @@ def credit_line():
     txt = ("By Wolchic | Тг - @weqec | "
            "Инструмент для хакинга и реверс-инжиниринга")
     print(f"{C.YELLOW}{C.BOLD}  {txt}{C.RESET}")
-
-
-def _restart_clock():
-    """Перезапустить фоновые часы (после input()/вывода)."""
-    if not sys.stdout.isatty():
-        return
-    global _clock_thread, _clock_stop
-    if _clock_thread is not None and _clock_thread.is_alive():
-        return
-    _start_clock()
 
 
 def clear():
@@ -194,11 +151,8 @@ def clear():
 def header(title="", live=False):
     """Печать баннера (с надписью автора под лого) или заголовка раздела.
 
-    Строка статуса с ОС/Python/временем печатается ТОЛЬКО когда live=True
-    (главное меню cyberdogs.py): она стоит одним фиксированным местом —
-    сразу под лого, и обновляется каждую секунду перерисовкой меню.
-    Внутри терминала и во всех остальных экранах live=False — статус-бара
-    нет, строка нигде больше не появляется.
+    Строка статуса (ОС · Python · Termux · время) УДАЛЕНА полностью —
+    нигде не выводится. Аргумент live оставлен для совместимости.
     """
     if title:
         line = "═" * 50
@@ -209,8 +163,6 @@ def header(title="", live=False):
         print(BANNER.format(c=C.CYAN, m=ACCENT, r=C.YELLOW,
                             v=APP_VERSION, s=C.RESET))
         credit_line()
-        if live and CFG_FLAGS.get("show_status_bar", True):
-            status_bar()
 
 
 def timed_input(prompt, timeout=1.0):
@@ -271,15 +223,12 @@ def menu_loop(title, items, banner=False):
     items: список кортежей (название, callback).
            callback=None → выход из меню («Назад» / «Выход»).
 
-    В главном меню (banner=True) экран перерисовывается раз в секунду,
-    поэтому строка статуса с часами стоит всегда на одном фиксированном
-    месте — сразу под логом — и показывает реальное время устройства.
-    В остальных меню — обычное ожидание ввода без статус-бара.
+    Строка статуса/часы удалены — экран рисуется один раз, ввод обычный.
     """
     def _render():
         clear()
         if banner:
-            header(live=True)     # статус-бар с часами — только в главном меню
+            header()              # баннер без статус-бара
         else:
             header(title)
         for name, cb in items:
@@ -294,31 +243,7 @@ def menu_loop(title, items, banner=False):
         _render()
         prompt = f"{C.GREEN}  cyberdogs/{title.split()[0].lower()}> {C.RESET}"
         try:
-            if banner:
-                # живой режим: ждём ввод по секундным тикам; если прошла
-                # секунда и ничего не набрано — перерисовываем экран,
-                # часы в статус-баре идут по реальному времени.
-                choice = ""
-                typed = ""
-                redraw_prompt = True
-                while True:
-                    p = prompt if redraw_prompt else ""
-                    got_eol, text = timed_input(p, timeout=1.0)
-                    if got_eol:
-                        choice = (typed + text).strip()
-                        break
-                    if not text or text == typed:
-                        # ничего нового не набрано — полная перерисовка
-                        typed = ""
-                        redraw_prompt = True
-                        _render()
-                        continue
-                    # пользователь печатает — не перерисовываем экран,
-                    # чтобы не затирать уже набранные символы
-                    typed = text
-                    redraw_prompt = False
-            else:
-                choice = input(prompt).strip()
+            choice = input(prompt).strip()
         except EOFError:
             break
 
