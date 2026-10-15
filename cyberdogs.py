@@ -26,7 +26,7 @@ from modules import tools, usb, settings, updates
 
 
 APP_NAME = "CyberDogs"
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 
 # единый источник версии для баннера (core.ui)
 ui.set_version(VERSION)
@@ -150,6 +150,7 @@ def terminal_entry():
     Выход из терминала (exit / Ctrl-D) — возврат в главное меню.
     """
     import cyberos
+    print()   # пустая строка-отступ перед экраном терминала (просьба: пробел перед ним)
     ui.set_version(cyberos.VERSION)   # версия ОС единая, не сбрасывается
     settings.apply()                  # пользовательский акцент — в шелле тоже
     sh = cyberos.Shell()
