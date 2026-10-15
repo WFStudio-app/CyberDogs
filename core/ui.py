@@ -216,8 +216,15 @@ def clear():
     os.system("clear" if os.name != "nt" else "cls")
 
 
-def header(title=""):
-    """Печать баннера (с надписью автора под лого) или заголовка раздела."""
+def header(title="", live=False):
+    """Печать баннера (с надписью автора под лого) или заголовка раздела.
+
+    Строка статуса с ОС/Python/временем печатается ТОЛЬКО когда live=True
+    (главное меню cyberdogs.py): она стоит одним фиксированным местом —
+    сразу под лого, и обновляется каждую секунду фоновым потоком часов.
+    Внутри терминала и во всех остальных экранах live=False — статус-бара
+    нет, часы не тикают в фоне и не мешают выводу шелла.
+    """
     if title:
         line = "═" * 50
         print(f"{ACCENT}{line}{C.RESET}")
@@ -227,7 +234,7 @@ def header(title=""):
         print(BANNER.format(c=C.CYAN, m=ACCENT, r=C.YELLOW,
                             v=APP_VERSION, s=C.RESET))
         credit_line()
-        if CFG_FLAGS.get("show_status_bar", True):
+        if live and CFG_FLAGS.get("show_status_bar", True):
             status_bar()
         else:
             stop_clock()
@@ -255,7 +262,7 @@ def menu_loop(title, items, banner=False):
     while True:
         clear()
         if banner:
-            header()
+            header(live=True)     # статус-бар с часами — только в главном меню
         else:
             header(title)
 

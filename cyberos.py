@@ -121,9 +121,10 @@ class Shell(object):
             "ping": self.app_ping, "ifconfig": self.app_ifconfig,
             "tools": self.app_tools_menu, "menu": self.app_cyberdogs_menu,
             "tty": self.cmd_tty, "goto": self.cmd_goto, "alias": self.cmd_alias,
-            # пакетный менеджер Truck и настройки ОС
+            # пакетный менеджер Truck, настройки и обновления ОС
             "trk": _c(cmds.cmd_trk), "truck": _c(cmds.cmd_trk),
-            "settings": self.cmd_settings,
+            "settings": self.cmd_settings, "настройки": self.cmd_settings,
+            "update": self.cmd_update, "обновления": self.cmd_update,
         }
         return r
 
@@ -132,6 +133,28 @@ class Shell(object):
         from modules.settings import settings_menu
         self.syslog("open settings from shell")
         settings_menu()
+
+    def cmd_update(self, args):
+        """Спец-команда: проверка/установка обновлений из терминала.
+
+        update          — открыть раздел «Обновления»;
+        update check    — только проверить наличие обновления;
+        update now      — проверить и обновить автоматически.
+        """
+        from modules import updates as upd
+        sub = args[0].lower() if args else ""
+        if sub == "check":
+            upd.check_updates()
+            self.syslog("update check from shell")
+        elif sub in ("now", "-y", "--auto"):
+            if upd.check_updates():
+                upd.perform_update()
+                self.syslog("updated from shell")
+            else:
+                self.syslog("update check: already latest")
+        else:
+            self.syslog("open updates from shell")
+            upd.update_menu()
 
     # ── встроенные команды шелла ──────────────────────────────
     def cmd_help(self, args):
@@ -259,6 +282,10 @@ class Shell(object):
             "neofetch": "neofetch — сведения о системе",
             "su": "su <user> — смена пользователя",
             "menu": "menu — классическое меню CyberDogs",
+            "settings": "settings — открыть раздел «Настройки» из шелла",
+            "update": ("update — раздел «Обновления»; update check — только "
+                       "проверка; update now — проверить и обновить"),
+            "trk": "trk install|remove|list|search|info|update — менеджер Truck",
         }
         self.out(C.CYAN + "  CYBEROS MAN PAGE\n" + C.RESET)
         self.out("  " + pages.get(args[0], "справки нет для '%s'" % args[0]))

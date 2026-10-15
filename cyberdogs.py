@@ -22,7 +22,7 @@ import core.ui as ui
 import core.truck as truck
 from modules.scan import networks, signals, wifi
 from modules.attack import wifi_crack, hosts_crack
-from modules import tools, usb, settings
+from modules import tools, usb, settings, updates
 
 
 APP_NAME = "CyberDogs"
@@ -176,6 +176,7 @@ def main_menu():
         ("5. Инструменты",    tools_menu),
         ("6. Игры",           games_menu),
         ("9. Настройки",      settings.settings_menu),
+        ("10. Обновления",    updates.update_menu),
         ("0. Выход", None),
     ]
     menu_loop(f"{APP_NAME} v{VERSION}", items, banner=True)
